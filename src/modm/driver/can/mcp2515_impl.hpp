@@ -218,6 +218,7 @@ modm::Mcp2515<SPI, CS, INT>::sendMessage(const can::Message& message)
 {
 	if (not modm_assert_continue_ignore(txQueue.push(message), "mcp2515.can.tx",
 			"CAN transmit software buffer overflowed!", 1)) {
+		/// buffer full, could not send
 		return false;
 	}
 	return true;
@@ -235,7 +236,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 	// read status flag of the device
 	statusBufferR_ = RF_CALL(readStatus(RX_STATUS));
 
-	tempR_ = true;
+	readTemp_ = true;
 	if (statusBufferR_ & FLAG_RXB0_FULL) {
 		addressBufferR_ = READ_RX;			// message in buffer 0
 	}
@@ -243,10 +244,10 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 		addressBufferR_ = READ_RX | 0x04;	// message in buffer 1 (RXB1SIDH)
 	}
 	else {
-		tempR_ = false;						// Error: no message available
+		readTemp_ = false;						// Error: no message available
 	}
 
-	if(tempR_)
+	if(readTemp_)
 	{
 		RF_WAIT_UNTIL(this->acquireMaster());
 		chipSelect.reset();
@@ -272,7 +273,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 	// RX0IF or RX1IF respectivly were already cleared automatically by rising CS.
 	// See section 12.4 in datasheet.
 
-	RF_END_RETURN(tempR_);
+	RF_END_RETURN(readTemp_);
 }
 
 template <typename SPI, typename CS, typename INT>
@@ -288,17 +289,16 @@ modm::Mcp2515<SPI, CS, INT>::update(){
 		if(RF_CALL(mcp2515ReadMessage()))
 		{
 			if(not modm_assert_continue_ignore(rxQueue.push(messageBuffer_), "mcp2515.can.tx",
-			"CAN transmit software buffer overflowed!", 1)){
-				/// ignore
-			}
+			"CAN transmit software buffer overflowed!", 1)){}
 		}
 	}
 
 	/// check if device accepts messages and start emptying the transmit queue if not empty
 	if (txQueue.isNotEmpty())
 	{
-		hasSend_ = RF_CALL(mcp2515SendMessage(txQueue.get()));
-		txQueue.pop();
+		if(RF_CALL(mcp2515SendMessage(txQueue.get()))){
+			txQueue.pop();
+		}
 	}
 	RF_END();
 }
@@ -336,12 +336,10 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515IsReadyToSend(uint8_t status)
 		// all buffers currently in use
 		ready = false;
 	}
-
 	return ready;
 }
 
 // ----------------------------------------------------------------------------
-
 template <typename SPI, typename CS, typename INT>
 modm::ResumableResult<bool>
 modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
@@ -351,52 +349,55 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 
 	statusBufferS_ = RF_CALL(readStatus(READ_STATUS));
 
-	/// wait for ready to send status flags
-	RF_WAIT_UNTIL(mcp2515IsReadyToSend(statusBufferS_));
+	addressBufferS_ = static_cast<uint8_t>(false);
 
-	if ((statusBufferS_ & TXB0CNTRL_TXREQ) == 0)
+	// /// send if ready, else return that nothing was sent
+	if(mcp2515IsReadyToSend(statusBufferS_))
 	{
-		addressBufferS_ = 0x00;  // TXB0SIDH
-	} else if ((statusBufferS_ & TXB1CNTRL_TXREQ) == 0)
-	{
-		addressBufferS_ = 0x02;  // TXB1SIDH
-	} else if ((statusBufferS_ & TXB2CNTRL_TXREQ) == 0)
-	{
-		addressBufferS_ = 0x04;  // TXB2SIDH
-	} else
-	{
-		// all buffer are in use => could not send the message
-	}
-
-	if (addressBufferS_ == 0x00 || addressBufferS_ == 0x02 || addressBufferS_ == 0x04)
-	{
-		RF_WAIT_UNTIL(this->acquireMaster());
-		chipSelect.reset();
-		RF_CALL(spi.transfer(WRITE_TX | addressBufferS_));
-		RF_CALL(writeIdentifier(message.identifier, message.flags.extended));
-
-		// if the message is a rtr-frame, is has a length but no attached data
-		if (message.flags.rtr)
+		if ((statusBufferS_ & TXB0CNTRL_TXREQ) == 0)
 		{
-			RF_CALL(spi.transfer(MCP2515_RTR | message.length));
+			addressBufferS_ = 0x00;  // TXB0SIDH
+		} else if ((statusBufferS_ & TXB1CNTRL_TXREQ) == 0)
+		{
+			addressBufferS_ = 0x02;  // TXB1SIDH
+		} else if ((statusBufferS_ & TXB2CNTRL_TXREQ) == 0)
+		{
+			addressBufferS_ = 0x04;  // TXB2SIDH
 		} else
 		{
-			RF_CALL(spi.transfer(message.length));
-
-			for (i_ = 0; i_ < message.length; ++i_) {
-				RF_CALL(spi.transfer(message.data[i_]));
-			}
+			// all buffer are in use => could not send the message
 		}
-		delayS_.restart(1ms);
-		chipSelect.set();
-		RF_WAIT_UNTIL(delayS_.isExpired());
 
-		// send message via RTS command
-		chipSelect.reset();
-		addressBufferS_ = (addressBufferS_ == 0) ? 1 : addressBufferS_;  // 0 2 4 => 1 2 4
-		RF_CALL(spi.transfer(RTS | addressBufferS_));
-		RF_WAIT_UNTIL(this->releaseMaster());
-		chipSelect.set();
+		if (addressBufferS_ == 0x00 || addressBufferS_ == 0x02 || addressBufferS_ == 0x04)
+		{
+			RF_WAIT_UNTIL(this->acquireMaster());
+			chipSelect.reset();
+			RF_CALL(spi.transfer(WRITE_TX | addressBufferS_));
+			RF_CALL(writeIdentifier(message.identifier, message.flags.extended));
+
+			// if the message is a rtr-frame, is has a length but no attached data
+			if (message.flags.rtr)
+			{
+				RF_CALL(spi.transfer(MCP2515_RTR | message.length));
+			} else
+			{
+				RF_CALL(spi.transfer(message.length));
+
+				for (i_ = 0; i_ < message.length; ++i_) {
+					RF_CALL(spi.transfer(message.data[i_]));
+				}
+			}
+			delayS_.restart(1ms);
+			chipSelect.set();
+			RF_WAIT_UNTIL(delayS_.isExpired());
+
+			// send message via RTS command
+			chipSelect.reset();
+			addressBufferS_ = (addressBufferS_ == 0) ? 1 : addressBufferS_;  // 0 2 4 => 1 2 4
+			RF_CALL(spi.transfer(RTS | addressBufferS_));
+			RF_WAIT_UNTIL(this->releaseMaster());
+			chipSelect.set();
+		}
 	}
 
 	RF_END_RETURN(static_cast<bool>(addressBufferS_));
