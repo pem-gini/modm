@@ -48,7 +48,7 @@ modm::Mcp2515<SPI, CS, INT>::initializeWithPrescaler(
 	// configuration mode
 	chipSelect.reset();
 	spi.transferBlocking(RESET);
-	modm::delay_ms(1);
+	//modm::delay_ms(1);
 	chipSelect.set();
 
 	// wait a bit to give the MCP2515 some time to restart
@@ -344,7 +344,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 	{
 		if ((statusBufferS & TXB0CNTRL_TXREQ) == 0)
 		{
-			addressBufferS = 0x00;  // TXB0SIDH
+			addressBufferS = 0x01;  // TXB0SIDH
 		} else if ((statusBufferS & TXB1CNTRL_TXREQ) == 0)
 		{
 			addressBufferS = 0x02;  // TXB1SIDH
@@ -356,11 +356,12 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 			// all buffer are in use => could not send the message
 		}
 
-		if (addressBufferS == 0x00 || addressBufferS == 0x02 || addressBufferS == 0x04)
+		if (addressBufferS == 0x01 || addressBufferS == 0x02 || addressBufferS == 0x04)
 		{
 			RF_WAIT_UNTIL(this->acquireMaster());
 			chipSelect.reset();
 			RF_CALL(spi.transfer(WRITE_TX | addressBufferS));
+			
 			RF_CALL(writeIdentifier(message.identifier, message.flags.extended));
 
 			// if the message is a rtr-frame, is has a length but no attached data
@@ -375,16 +376,22 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 					RF_CALL(spi.transfer(message.data[i]));
 				}
 			}
-			delayS.restart(1ms);
 			chipSelect.set();
+			delayS.restart(100ns);			
 			RF_WAIT_UNTIL(delayS.isExpired());
 
+			//chipSelect.reset();
+			//RF_CALL(spi.transfer(WRITE_TX | addressBufferS));
+			//chipSelect.set();
+			
 			// send message via RTS command
 			chipSelect.reset();
-			addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
+			//addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
+			
 			RF_CALL(spi.transfer(RTS | addressBufferS));
-			RF_WAIT_UNTIL(this->releaseMaster());
 			chipSelect.set();
+			RF_WAIT_UNTIL(this->releaseMaster());
+			
 		}
 	}
 
@@ -438,9 +445,9 @@ modm::Mcp2515<SPI, CS, INT>::readStatus(uint8_t type)
 	chipSelect.reset();
 	RF_CALL(spi.transfer(type));
 	statusBuffer = RF_CALL(spi.transfer(0xff));
-	RF_WAIT_UNTIL(this->releaseMaster());
 	chipSelect.set();
-
+	
+	RF_WAIT_UNTIL(this->releaseMaster());
 	RF_END_RETURN(statusBuffer);
 }
 
@@ -456,7 +463,7 @@ modm::Mcp2515<SPI, CS, INT>::writeIdentifier(const uint32_t& identifier,
 
 	RF_BEGIN();
 
-	RF_WAIT_UNTIL(this->acquireMaster());
+	//RF_WAIT_UNTIL(this->acquireMaster());
 	if (isExtendedFrame)
 	{
 		RF_CALL(spi.transfer(*((uint16_t *)ptr + 1) >> 5));
@@ -475,7 +482,7 @@ modm::Mcp2515<SPI, CS, INT>::writeIdentifier(const uint32_t& identifier,
 		RF_CALL(spi.transfer(0));
 		RF_CALL(spi.transfer(0));
 	}
-	RF_WAIT_UNTIL(this->releaseMaster());
+	//RF_WAIT_UNTIL(this->releaseMaster());
 
 	RF_END();
 }

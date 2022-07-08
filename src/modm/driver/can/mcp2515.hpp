@@ -128,9 +128,11 @@ namespace modm
 	public:
 		Mcp2515() : messageBuffer{}, delayS{} {
 			this->attachConfigurationHandler([]() {
-				SPI::setDataMode(SPI::DataMode::Mode3);
+				SPI::setDataMode(SPI::DataMode::Mode0);
 				SPI::setDataOrder(SPI::DataOrder::MsbFirst);
 			});
+			CS::setOutput();
+			CS::set();
 		}
 
 		template<frequency_t ExternalClock, bitrate_t bitrate=kbps(125), percent_t tolerance=pct(1) >
