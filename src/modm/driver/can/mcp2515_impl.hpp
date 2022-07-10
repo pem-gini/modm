@@ -344,7 +344,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 	{
 		if ((statusBufferS & TXB0CNTRL_TXREQ) == 0)
 		{
-			addressBufferS = 0x01;  // TXB0SIDH
+			addressBufferS = 0x00;  // TXB0SIDH
 		} else if ((statusBufferS & TXB1CNTRL_TXREQ) == 0)
 		{
 			addressBufferS = 0x02;  // TXB1SIDH
@@ -356,7 +356,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 			// all buffer are in use => could not send the message
 		}
 
-		if (addressBufferS == 0x01 || addressBufferS == 0x02 || addressBufferS == 0x04)
+		if (addressBufferS == 0x00 || addressBufferS == 0x02 || addressBufferS == 0x04)
 		{
 			RF_WAIT_UNTIL(this->acquireMaster());
 			chipSelect.reset();
@@ -386,8 +386,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message& message)
 			
 			// send message via RTS command
 			chipSelect.reset();
-			//addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
-			
+			addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
 			RF_CALL(spi.transfer(RTS | addressBufferS));
 			chipSelect.set();
 			RF_WAIT_UNTIL(this->releaseMaster());
