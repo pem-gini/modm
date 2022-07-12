@@ -247,9 +247,9 @@ private:
 	uint8_t a = 0;
 	uint8_t b = 0;
 	uint8_t data = 0;
-	bool readTemp = false;
+	bool readSuccessfulFlag = false;
 	bool readIdentifierSuccessfulFlag = false;
-	bool tempS = false;
+	bool isReadyToSendFlag = false;
 	bool receiveSuccess = false;
 
 	uint8_t tx_buf[modm::mcp2515::options::SPI_BUFFER_SIZE];

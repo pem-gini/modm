@@ -226,7 +226,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 	// read status flag of the device
 	statusBufferR = RF_CALL(readStatus(RX_STATUS));
 
-	readTemp = true;
+	readSuccessfulFlag = true;
 	if (statusBufferR & FLAG_RXB0_FULL)
 	{
 		addressBufferR = READ_RX;  // message in buffer 0
@@ -235,10 +235,10 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 		addressBufferR = READ_RX | 0x04;  // message in buffer 1 (RXB1SIDH)
 	} else
 	{
-		readTemp = false;  // Error: no message available
+		readSuccessfulFlag = false;  // Error: no message available
 	}
 
-	if (readTemp)
+	if (readSuccessfulFlag)
 	{
 		RF_WAIT_UNTIL(this->acquireMaster());
 		chipSelect.reset();
