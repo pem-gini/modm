@@ -37,7 +37,12 @@ def prepare(module, options):
             description="",
             minimum=1, maximum=2 ** 16 - 2,
             default=32))
-
+    module.add_option(
+        NumericOption(
+            name="spi.buffer",
+            description="",
+            minimum=1, maximum=2 ** 16 - 2,
+            default=32))
     module.depends(
         ":architecture:accessor",
         ":architecture:assert",

@@ -10,6 +10,8 @@ namespace modm::mcp2515::options
 using TX_QUEUE = modm::atomic::Queue<modm::can::Message, {{options["buffer.tx"]}}>;
 using RX_QUEUE = modm::atomic::Queue<modm::can::Message, {{options["buffer.rx"]}}>;
 
+static constexpr size_t SPI_BUFFER_SIZE = {{options["spi.buffer"]}};
+
 }  // namespace modm::mcp2515::options
 
 #endif // MODM_MCP2515_OPTIONS_HPP
