@@ -218,6 +218,7 @@ modm::ResumableResult<bool>
 modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 {
 	using namespace mcp2515;
+	const uint32_t *ptr = &messageBuffer.identifier;
 
 	RF_BEGIN();
 
@@ -253,28 +254,27 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 
 		if (rx_buf[2] & MCP2515_IDE)
 		{
-			*((uint16_t *)(&(messageBuffer.identifier)) + 1) = (uint16_t)rx_buf[1] << 5;
-			*((uint8_t *)(&(messageBuffer.identifier)) + 1) = rx_buf[3];
+			*((uint16_t *)ptr + 1) = (uint16_t)rx_buf[1] << 5;
+			*((uint8_t *)ptr + 1) = rx_buf[3];
 
-			*((uint8_t *)(&(messageBuffer.identifier)) + 2) |= (rx_buf[2] >> 3) & 0x1C;
-			*((uint8_t *)(&(messageBuffer.identifier)) + 2) |= rx_buf[2] & 0x03;
+			*((uint8_t *)ptr + 2) |= (rx_buf[2] >> 3) & 0x1C;
+			*((uint8_t *)ptr + 2) |= rx_buf[2] & 0x03;
 
-			*((uint8_t *)(&(messageBuffer.identifier))) = rx_buf[4];
+			*((uint8_t *)ptr) = rx_buf[4];
 
 			messageBuffer.flags.extended = true;
 		} else
 		{
 
-			*((uint8_t *)(&(messageBuffer.identifier)) + 3) = 0;
-			*((uint8_t *)(&(messageBuffer.identifier)) + 2) = 0;
+			*((uint8_t *)ptr + 3) = 0;
+			*((uint8_t *)ptr + 2) = 0;
 
-			*((uint16_t *)(&(messageBuffer.identifier))) = (uint16_t)rx_buf[1] << 3;
+			*((uint16_t *)ptr) = (uint16_t)rx_buf[1] << 3;
 
-			*((uint8_t *)(&(messageBuffer.identifier))) |= rx_buf[2] >> 5;
+			*((uint8_t *)ptr) |= rx_buf[2] >> 5;
 		}
 		// RF_WAIT_UNTIL(this->releaseMaster());
 
-		
 		if (statusBufferR & FLAG_RTR)
 		{
 			messageBuffer.flags.rtr = true;
@@ -416,7 +416,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515SendMessage(const can::Message &message)
 				// RF_CALL(spi.transfer(message.length));
 				tx_buf[5] = message.length;
 				// payload:
-				for (i = 0; i < message.length; ++i) { tx_buf[6 + i] = message.data[i]; }
+				std::memcpy(&tx_buf[6], message.data, message.length);
 			}
 			RF_CALL(spi.transfer(tx_buf, rx_buf, 6 + message.length));
 
