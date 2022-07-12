@@ -249,7 +249,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 		tx_buf[5] = 0xff;
 		RF_CALL(spi.transfer(tx_buf, rx_buf, 6));
 
-		temp = false;
+		messageBuffer.flags.extended = false;
 
 		if (rx_buf[2] & MCP2515_IDE)
 		{
@@ -261,7 +261,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 
 			*((uint8_t *)(&(messageBuffer.identifier))) = rx_buf[4];
 
-			temp = true;
+			messageBuffer.flags.extended = true;
 		} else
 		{
 
@@ -274,8 +274,7 @@ modm::Mcp2515<SPI, CS, INT>::mcp2515ReadMessage()
 		}
 		// RF_WAIT_UNTIL(this->releaseMaster());
 
-		// messageBuffer.flags.extended = RF_CALL(readIdentifierBuffer(messageBuffer.identifier,
-		// &tx_buf[0], 1));
+		
 		if (statusBufferR & FLAG_RTR)
 		{
 			messageBuffer.flags.rtr = true;
