@@ -129,8 +129,10 @@ public:
 				const uint32_t* ptr = &messageBuffer.identifier;
 				////////////////////////////////////////////////////////////////////////////
 				auto copyCanMessage = [&](uint8_t* tx, uint8_t* rx, size_t length) {
-					std::memcpy(messageBuffer.data, rx_buf, messageBuffer.length);
 					chipSelect.set();
+					std::memcpy(messageBuffer.data, rx_buf, messageBuffer.length);
+					if (not modm_assert_continue_ignore(rxQueue.push(messageBuffer), "mcp2515.can.tx",
+						"CAN transmit software buffer overflowed!", 1)){}
 				};
 				auto readCanMessage = [&](uint8_t* tx, uint8_t* rx, size_t length) {
 					messageBuffer.flags.extended = false;
