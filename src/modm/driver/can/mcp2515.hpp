@@ -26,6 +26,7 @@
 #include <modm/processing/protothread.hpp>
 #include <modm/processing/resumable.hpp>
 #include <modm/processing/timer.hpp>
+#include <modm/platform/exti/exti.hpp>
 
 #include "mcp2515_definitions.hpp"
 #include "mcp2515_options.hpp"
@@ -119,6 +120,91 @@ public:
 		});
 		CS::setOutput();
 		CS::set();
+
+		modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
+			if (this->acquireMaster())
+			{
+				/// rx data directly
+				using namespace mcp2515;
+				const uint32_t* ptr = &messageBuffer.identifier;
+				////////////////////////////////////////////////////////////////////////////
+				auto copyCanMessage = [&](uint8_t* tx, uint8_t* rx, size_t length) {
+					std::memcpy(messageBuffer.data, rx_buf, messageBuffer.length);
+					chipSelect.set();
+				};
+				auto readCanMessage = [&](uint8_t* tx, uint8_t* rx, size_t length) {
+					messageBuffer.flags.extended = false;
+					if (rx_buf[2] & MCP2515_IDE)
+					{
+						*((uint16_t*)ptr + 1) = (uint16_t)rx_buf[1] << 5;
+						*((uint8_t*)ptr + 1) = rx_buf[3];
+						*((uint8_t*)ptr + 2) |= (rx_buf[2] >> 3) & 0x1C;
+						*((uint8_t*)ptr + 2) |= rx_buf[2] & 0x03;
+						*((uint8_t*)ptr) = rx_buf[4];
+						messageBuffer.flags.extended = true;
+					} else
+					{
+						*((uint8_t*)ptr + 3) = 0;
+						*((uint8_t*)ptr + 2) = 0;
+						*((uint16_t*)ptr) = (uint16_t)rx_buf[1] << 3;
+						*((uint8_t*)ptr) |= rx_buf[2] >> 5;
+					}
+					if (statusBufferR & FLAG_RTR)
+					{
+						messageBuffer.flags.rtr = true;
+					} else
+					{
+						messageBuffer.flags.rtr = false;
+					}
+					messageBuffer.length = rx_buf[5] & 0x0f;
+
+					// new DMA transfer, because we know buffer length now
+					std::memset(tx_buf, 0xFF, messageBuffer.length);
+					spi.transfer(tx_buf, rx_buf, messageBuffer.length, copyCanMessage);
+				};
+				auto processStatusAndPrepareRead = [&](uint8_t* tx, uint8_t* rx, size_t length) {
+					chipSelect.set();
+					statusBufferR = rx[1];
+					readSuccessfulFlag = true;
+					if (statusBufferR & FLAG_RXB0_FULL)
+					{
+						addressBufferR = READ_RX;  // message in buffer 0
+					} else if (statusBufferR & FLAG_RXB1_FULL)
+					{
+						addressBufferR = READ_RX | 0x04;  // message in buffer 1 (RXB1SIDH)
+					} else
+					{
+						readSuccessfulFlag = false;  // Error: no message available
+					}
+
+					if (readSuccessfulFlag)
+					{
+						chipSelect.reset();
+						tx_buf[0] = addressBufferR;
+						tx_buf[1] = 0xff;
+						tx_buf[2] = 0xff;
+						tx_buf[3] = 0xff;
+						tx_buf[4] = 0xff;
+						tx_buf[5] = 0xff;
+						spi.transfer(tx_buf, rx_buf, 6, readCanMessage);
+					}
+				};
+				auto readStatus = [&]() {
+					// read status flag of the device
+					chipSelect.reset();
+					tx_buf[0] = RX_STATUS;
+					tx_buf[1] = 0xFF;
+					spi.transfer(tx_buf, rx_buf, 2, processStatusAndPrepareRead);
+				};
+				////////////////////////////////////////////////////////////////////////////
+				/// kickstart read
+				readStatus();
+				this->releaseMaster();
+			} else
+			{
+				// do nothing ... :)
+			}
+		});
 	}
 
 	template<frequency_t ExternalClock, bitrate_t bitrate = kbps(125), percent_t tolerance = pct(1)>

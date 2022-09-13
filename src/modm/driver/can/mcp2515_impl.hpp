@@ -96,7 +96,6 @@ bool
 modm::Mcp2515<SPI, CS, INT>::initialize()
 {
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
-
 	return initializeWithPrescaler(Timings::getPrescaler(), Timings::getSJW(), Timings::getProp(),
 								   Timings::getPS1(), Timings::getPS2());
 }

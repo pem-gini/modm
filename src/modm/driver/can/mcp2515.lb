@@ -15,7 +15,6 @@ def init(module):
     module.name = ":driver:mcp2515"
     module.description = "MPC2515 External CAN Controller"
 
-
 def prepare(module, options):
     module.add_option(
         EnumerationOption(
@@ -52,7 +51,9 @@ def prepare(module, options):
         ":architecture:spi.device",
         ":processing:protothread",
         ":processing:timer",
-        ":debug")
+        ":platform:exti",
+        ":debug",
+    )
     return True
 
 def build(env):

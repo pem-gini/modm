@@ -22,6 +22,8 @@
 #include <modm/math/algorithm/prescaler.hpp>
 #include "spi_hal_{{ id }}.hpp"
 
+#include <etl/delegate.h>
+
 namespace modm
 {
 
@@ -44,6 +46,7 @@ class SpiMaster{{ id }} : public modm::SpiMaster
 	static ConfigurationHandler configuration;
 public:
 	using Hal = SpiHal{{ id }};
+	using SpiTransferCallback = etl::delegate<void(const uint8_t *tx, uint8_t *rx, std::size_t length)>;
 
 	/// Spi Data Mode, Mode0 is the most common mode
 	enum class
@@ -142,6 +145,10 @@ public:
 
 	static modm::ResumableResult<void>
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
+
+	static modm::ResumableResult<void>
+	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length, SpiTransferCallback cb);
+
 	// end documentation inherited
 };
 
