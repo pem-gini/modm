@@ -46,6 +46,17 @@ struct Spi
 		LsbFirst = 0b1,
 	};
 };
+
+
+// struct SpiTransferStep{
+// 	const uint8_t *tx;
+// 	uint8_t *rx; 
+// 	std::size_t length;
+// 	modm::SpiTransferCallback cb;
+// 	modm::SpiTransferConditional condition;
+// 	modm::SpiTransferConfiguration configuration;
+// };
+
 struct SpiTransferConfiguration{
 	etl::delegate<void()> pre;
 	etl::delegate<void()> post;

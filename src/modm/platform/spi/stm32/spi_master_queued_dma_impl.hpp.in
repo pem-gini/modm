@@ -108,13 +108,8 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	const uint8_t* buf = buffers.at(nextBuffer).data();
 	std::memcpy(buf, tx, length);
 	// ---------------------------
-	modm::SpiTransferTask task = [buf, rx, length, configuration](){ //txPtr, rx, are a copy of the original pointer
-		if(configuration.pre.is_valid()){
-			configuration.pre();
-		}
-		transfer(buf, rx, length);
-		return true;
-	};
+	auto task = createTask(buf, rx, length, {}, configuration);
+	queue.push({.task = task, .cb = cb, .config = configuration });
 	// ---------------------------
 	queue.push({.task = task, .cb = cb, .config = configuration });
 	nextBuffer++;
@@ -123,38 +118,72 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	}
 }
 
+
 template <class DmaChannelRx, class DmaChannelTx>
+template <typename Length>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferNext(const uint8_t *tx,
-		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
+		uint8_t *rx, Length length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
 {
-	modm::SpiTransferTask task = [tx, rx, length, configuration](){ //txPtr, rx, are a copy of the original pointer
-		if(configuration.pre.is_valid()){
-			configuration.pre();
-		}
-		transfer(tx, rx, length);
-		return true;
-	};
+	auto task = createTask(tx, rx, length, {}, configuration);
+	queue.push({.task = task, .cb = cb, .config = configuration });
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
+template <typename Length>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferNext(const uint8_t *tx,
-		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, 
+		uint8_t *rx, Length length, modm::SpiTransferCallback cb, 
 		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration)
 {
-	modm::SpiTransferTask task = [tx, rx, length, condition, configuration](){
-		if(condition.is_valid() && condition()){
-			if(configuration.pre.is_valid()){
-				configuration.pre();
-			}
-			transfer(tx, rx, length);
-			return true;
-		}
-		return false;
-	};
+	auto task = createTask(tx, rx, length, condition, configuration);
 	queue.push({.task = task, .cb = cb, .config = configuration });
 }
+
+
+template <class DmaChannelRx, class DmaChannelTx>
+template <typename Length>
+modm::SpiTransferTask modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::createTask(
+		const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, 
+		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration)
+{
+	return [tx, rx, length, condition, configuration](){
+		bool work = true;
+		if(condition.is_valid()){
+			work = condition();
+		}
+		if(work){
+			/// define length
+			size_t l = 0;
+			if constexpr(std::is_integral_v<Length>){
+				l = length;
+			}
+			else{
+				l = length();
+			}
+			/// check length
+			if (l == 0){
+				/// length irrelevant, do not do anything
+				work = false;
+			}
+			else{
+				/// we ha ve valid length
+				if(configuration.pre.is_valid()){
+					configuration.pre();
+				}
+				/// shall we really use dma ?
+				if(l == 1){
+					transfer(tx, rx, l);
+				}else{
+					rx[0] = transferBlockingSingleByte(tx[0]);
+				}
+			}
+		}
+		return work;
+	};
+}
+
+
 
 
 // template <class DmaChannelRx, class DmaChannelTx>

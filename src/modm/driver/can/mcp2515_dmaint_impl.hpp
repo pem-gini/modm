@@ -288,7 +288,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	tx_buf[1] = 0xFF;
 	spi.transferBegin(tx_buf, rx_buf, 2, processStatusAndPrepareRead, configuration);
 	spi.transferNext(tx_buf, rx_buf, 6, readCanMessage, [&](){return readSuccessfulFlag;}, configuration);
-	spi.transferNext(tx_buf, rx_buf, messageBuffer.length, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration);
+	spi.transferNext(tx_buf, rx_buf, [&](){return messageBuffer.length;}, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration);
 }
 
 // ----------------------------------------------------------------------------
@@ -359,14 +359,15 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 	auto identifierPost = [&](){
 		modm::delay(100ns);
 		addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
+		tx_buf[0] = RTS | addressBufferS;
 	};
 
 	// go
 	tx_buf[0] = READ_STATUS;
 	tx_buf[1] = 0xFF;
 	spi.transferBegin(tx_buf, rx_buf, 2, statusPost, configuration);
-	spi.transferNext(tx_buf, rx_buf, 6 + message.length, identifierPost, configuration);
-	spi.transferNext(RTS | addressBufferS, [&](){return addressBufferS != 0xFF;}, configuration); // skip if no free tx buffer
+	spi.transferNext(tx_buf, rx_buf, [&](){6 + message.length;}, identifierPost, configuration);
+	spi.transferNext(tx_buf, rx_buf, 1, modm::SpiTransferCallback{}, [&](){return addressBufferS != 0xFF;}, configuration); // skip if no free tx buffer
 }
 
 // ----------------------------------------------------------------------------

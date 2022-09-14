@@ -78,14 +78,24 @@ public:
 	static void
 	transferBegin(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
+	template <typename Length>
 	static void
-	transferNext(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+	transferNext(const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
+	template <typename Length>
 	static void
-	transferNext(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+	transferNext(const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
 	// static modm::ResumableResult<void>
 	// transfer(SpiTransferTask, SpiTransferCallback cb, SpiTransferConfiguration configuration = SpiTransferConfiguration{});
+
+	// template <typename... Steps>
+	// static constexpr void pipeline(SpiTransferStep step, Steps... rest){
+	// 	transferBegin(step.tx, step.rx, step.cb, step.configuration);
+	// 	std::apply([](auto&&... s){
+	// 		((transferNext(s.tx, s.rx, s.length, s.cb, s.condition, s.configuration)), ...);
+	// 	}, std::tie(rest...));
+	// };
 
 private:
 	static uint8_t
@@ -93,6 +103,10 @@ private:
 
 	static void 
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
+
+	template <typename Length>
+	modm::SpiTransferTask createTask(const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, 
+		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration);
 
 private:
 	static void
