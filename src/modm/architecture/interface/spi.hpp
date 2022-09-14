@@ -17,6 +17,8 @@
 
 #include <modm/architecture/interface/peripheral.hpp>
 
+#include <etl/queue.h>
+#include <etl/delegate.h>
 namespace modm
 {
 
@@ -44,6 +46,13 @@ struct Spi
 		LsbFirst = 0b1,
 	};
 };
+struct SpiTransferConfiguration{
+	etl::delegate<void()> pre;
+	etl::delegate<void()> post;
+};
+using SpiTransferTask = etl::delegate<void()>;
+using SpiTransferCallback = etl::delegate<void()>;
+using SpiTransferConditional = etl::delegate<bool()>;
 
 } // namespace modm
 

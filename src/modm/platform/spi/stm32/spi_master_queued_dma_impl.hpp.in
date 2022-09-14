@@ -1,0 +1,239 @@
+/*
+ * Copyright (c) 2020, Mike Wolfram
+ *
+ * This file is part of the modm project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+// ----------------------------------------------------------------------------
+
+#ifndef MODM_STM32_SPI_MASTER{{ id }}_QUEUED_DMA_HPP
+#	error 	"Don't include this file directly, use 'spi_master_{{ id }}__Queued_Dma.hpp' instead!"
+#endif
+
+template <class DmaChannelRx, class DmaChannelTx>
+template <class SystemClock, modm::baudrate_t baudrate, modm::percent_t tolerance>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::initialize()
+{
+	// Configure the DMA channels, then calls SpiMaster{{ id }}::initialzie().
+	Dma::RxChannel::configure(DmaBase::DataTransferDirection::PeripheralToMemory,
+			DmaBase::MemoryDataSize::Byte, DmaBase::PeripheralDataSize::Byte,
+			DmaBase::MemoryIncrementMode::Increment, DmaBase::PeripheralIncrementMode::Fixed,
+			DmaBase::Priority::High);
+	Dma::RxChannel::setPeripheralAddress(SPI{{ id }}_BASE + 0x0c);
+	Dma::RxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
+	Dma::RxChannel::setTransferCompleteIrqHandler(handleDmaReceiveComplete);
+	Dma::RxChannel::enableInterruptVector();
+	Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
+			DmaBase::InterruptEnable::TransferComplete);
+	Dma::RxChannel::template setPeripheralRequest<Dma::RxRequest>();
+
+	Dma::TxChannel::configure(DmaBase::DataTransferDirection::MemoryToPeripheral,
+			DmaBase::MemoryDataSize::Byte, DmaBase::PeripheralDataSize::Byte,
+			DmaBase::MemoryIncrementMode::Increment, DmaBase::PeripheralIncrementMode::Fixed,
+			DmaBase::Priority::High);
+	Dma::TxChannel::setPeripheralAddress(SPI{{ id }}_BASE + 0x0c);
+	Dma::TxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
+	Dma::TxChannel::setTransferCompleteIrqHandler(handleDmaTransmitComplete);
+	Dma::TxChannel::enableInterruptVector();
+	Dma::TxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
+			DmaBase::InterruptEnable::TransferComplete);
+	Dma::TxChannel::template setPeripheralRequest<Dma::TxRequest>();
+
+	SpiMaster{{ id }}::initialize<SystemClock, baudrate, tolerance>();
+
+%% if "fifo" in features
+	SpiHal{{ id }}::setRxFifoThreshold(SpiHal{{ id }}::RxFifoThreshold::QuarterFull);
+%% endif
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+uint8_t
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration)
+{
+	// disable DMA for single byte transfer
+	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
+		SpiBase::Interrupt::RxDmaEnable);
+
+	if(configuration.pre.is_valid()){
+		configuration.pre();
+	}
+	
+	// wait for previous transfer to finish
+	while (!SpiHal{{ id }}::isTransmitRegisterEmpty()){
+		/// ...
+	}
+	// start transfer by copying data into register
+	SpiHal{{ id }}::write(data);
+
+	while(!SpiHal{{ id }}::isReceiveRegisterNotEmpty()){
+		/// ...
+	}
+	SpiHal{{ id }}::read(data);
+
+	if(configuration.post.is_valid()){
+		configuration.post();
+	}
+
+	return data;
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration){
+	for(size_t i = 0; i < length; i++){
+		uint8_t b = tx[i];
+		rx[i] = modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(b, configuration);
+	}
+}
+
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
+		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
+{
+	modm::SpiTransferTask task = [tx, rx, length, configuration](){
+		if(configuration.pre.is_valid()){
+			configuration.pre();
+		}
+		modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(tx, rx, length);
+	};
+	queue.push({.task = task, .cb = cb, .config = configuration });
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
+		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, 
+		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration)
+{
+	modm::SpiTransferTask task = [tx, rx, length, condition, configuration](){
+		if(condition.is_valid() && condition()){
+			if(configuration.pre.is_valid()){
+				configuration.pre();
+			}
+			transfer(tx, rx, length);
+		}
+	};
+	queue.push({.task = task, .cb = cb, .config = configuration });
+}
+
+
+// template <class DmaChannelRx, class DmaChannelTx>
+// static void
+// modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(modm::platform::SpiMaster{{ id }}::SpiTransferTask, modm::platform::SpiMaster{{ id }}::SpiTransferCallback cb, SpiTransferConfiguration configuration)
+// {
+// 	push({.task = task, .cb = cb, .config = configuration });
+// }
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::push(SpiTansferEntry&& entry)
+{
+	bool instant = queue.empty();
+	if(!queue.full()){
+		queue.push(entry);
+	}
+	/// exec current task immediately
+	if(instant){
+		exec();
+	}
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::exec()
+{
+	if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
+		const auto& entry = queue.front();
+		if(entry.config.pre.is_valid()){
+			entry.config.pre();
+		}
+		entry.task();
+	}
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransferError()
+{
+	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
+			SpiBase::Interrupt::RxDmaEnable);
+	Dma::RxChannel::stop();
+	Dma::TxChannel::stop();
+	dmaError = true;
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaReceiveComplete()
+{
+	Dma::RxChannel::stop();
+	dmaReceiveComplete = true;
+	end();
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransmitComplete()
+{
+	Dma::TxChannel::stop();
+	dmaTransmitComplete = true;
+	end();
+}
+
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end()
+{
+	if(dmaTransmitComplete && dmaReceiveComplete){
+		const auto& entry = queue.front();
+		if(entry.config.post.is_valid()){
+			entry.config.post();
+		}
+		if(entry.cb.is_valid()){
+			entry.cb();
+		}
+		queue.pop();
+
+		/// re trgger ourselfs if necessary
+		exec();
+	}
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
+		uint8_t *rx, std::size_t length)
+{
+	dmaError = false;
+	SpiHal{{ id }}::enableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);
+	if (tx) {
+		Dma::TxChannel::setMemoryAddress(uint32_t(tx));
+		Dma::TxChannel::setMemoryIncrementMode(true);
+	} else {
+		Dma::TxChannel::setMemoryAddress(uint32_t(&dmaDummy));
+		Dma::TxChannel::setMemoryIncrementMode(false);
+	}
+	if (rx) {
+		Dma::RxChannel::setMemoryAddress(uint32_t(rx));
+		Dma::RxChannel::setMemoryIncrementMode(true);
+	} else {
+		Dma::RxChannel::setMemoryAddress(uint32_t(&dmaDummy));
+		Dma::RxChannel::setMemoryIncrementMode(false);
+	}
+
+
+	Dma::RxChannel::setDataLength(length);
+	dmaReceiveComplete = false;
+	Dma::RxChannel::start();
+
+	Dma::TxChannel::setDataLength(length);
+	dmaTransmitComplete = false;
+	Dma::TxChannel::start();
+}

@@ -46,7 +46,8 @@ class Instance(Module):
         if env.has_module(":platform:dma"):
             env.template("spi_master_dma.hpp.in", "spi_master_{}_dma.hpp".format(self.instance))
             env.template("spi_master_dma_impl.hpp.in", "spi_master_{}_dma_impl.hpp".format(self.instance))
-
+            env.template("spi_master_queued_dma.hpp.in", "spi_master_{}_queued_dma.hpp".format(self.instance))
+            env.template("spi_master_queued_dma_impl.hpp.in", "spi_master_{}_queued_dma_impl.hpp".format(self.instance))
 
 def init(module):
     module.name = ":platform:spi"

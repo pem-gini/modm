@@ -60,6 +60,8 @@ def build(env):
     env.outbasepath = "modm/src/modm/driver/can"
     env.copy("mcp2515.hpp")
     env.copy("mcp2515_impl.hpp")
+    env.copy("mcp2515_dmaint.hpp")
+    env.copy("mcp2515_dmaint_impl.hpp")
     env.copy("mcp2515_bit_timings.hpp")
     env.copy("mcp2515_definitions.hpp")
     env.template("mcp2515.cpp.in")
