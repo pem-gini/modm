@@ -45,7 +45,11 @@ private:
 		modm::SpiTransferConfiguration config;
 	};
 	using SpiTransferTaskQueue = etl::queue<SpiTansferEntry, 64>;
-	
+	static constexpr size_t SPI_DATA_BUFFER_LENGTH = 64;
+	static constexpr size_t SPI_DATA_BUFFER_COUNT = 32;
+	using SpiDataBuffer = std::array<uint8_t,SPI_DATA_BUFFER_LENGTH>;
+	using SpiDataQueue = std::array<SpiDataBuffer, SPI_DATA_BUFFER_COUNT>;
+
 	struct Dma {
 		using RxChannel = typename DmaChannelRx::template RequestMapping<
 				Peripheral::Spi{{ id }}, DmaBase::Signal::Rx>::Channel;
@@ -72,15 +76,21 @@ public:
 	transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
 	static void
-	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+	transferBegin(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
 	static void
-	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+	transferNext(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+
+	static void
+	transferNext(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
 	// static modm::ResumableResult<void>
 	// transfer(SpiTransferTask, SpiTransferCallback cb, SpiTransferConfiguration configuration = SpiTransferConfiguration{});
 
 private:
+	static uint8_t
+	transferBlockingSingleByte(uint8_t b);
+
 	static void 
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
@@ -94,7 +104,7 @@ private:
 
 	static void push(SpiTansferEntry&& entry);
 	static void exec();
-	static void end();
+	static void end(bool skipPost = false);
 
 
 	static inline bool dmaError { false };
@@ -105,6 +115,8 @@ private:
 	static inline uint8_t dmaDummy { 0 };
 
 	static inline SpiTransferTaskQueue queue;
+	static inline SpiDataQueue buffers;
+	static inline size_t nextBuffer = 0;
 };
 
 } // namespace platform

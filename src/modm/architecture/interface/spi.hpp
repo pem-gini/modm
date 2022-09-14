@@ -50,7 +50,7 @@ struct SpiTransferConfiguration{
 	etl::delegate<void()> pre;
 	etl::delegate<void()> post;
 };
-using SpiTransferTask = etl::delegate<void()>;
+using SpiTransferTask = etl::delegate<bool()>;
 using SpiTransferCallback = etl::delegate<void()>;
 using SpiTransferConditional = etl::delegate<bool()>;
 

@@ -52,62 +52,94 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::initiali
 
 template <class DmaChannelRx, class DmaChannelTx>
 uint8_t
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration)
-{
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlockingSingleByte(uint8_t data){
 	// disable DMA for single byte transfer
-	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
-		SpiBase::Interrupt::RxDmaEnable);
-
-	if(configuration.pre.is_valid()){
-		configuration.pre();
-	}
-	
+	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);
 	// wait for previous transfer to finish
 	while (!SpiHal{{ id }}::isTransmitRegisterEmpty()){
 		/// ...
 	}
 	// start transfer by copying data into register
 	SpiHal{{ id }}::write(data);
-
 	while(!SpiHal{{ id }}::isReceiveRegisterNotEmpty()){
 		/// ...
 	}
 	SpiHal{{ id }}::read(data);
+	return data;
+}
 
+template <class DmaChannelRx, class DmaChannelTx>
+uint8_t
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration)
+{
+	if(configuration.pre.is_valid()){
+		configuration.pre();
+	}
+	uint8_t read = transferBlockingSingleByte(data);
 	if(configuration.post.is_valid()){
 		configuration.post();
 	}
-
-	return data;
+	return read;
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration){
+	if(configuration.pre.is_valid()){
+		configuration.pre();
+	}
 	for(size_t i = 0; i < length; i++){
 		uint8_t b = tx[i];
-		rx[i] = modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(b, configuration);
+		rx[i] = transferBlockingSingleByte(b);
+	}
+	if(configuration.post.is_valid()){
+		configuration.post();
 	}
 }
 
-
 template <class DmaChannelRx, class DmaChannelTx>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBegin(const uint8_t *tx,
 		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
 {
-	modm::SpiTransferTask task = [tx, rx, length, configuration](){
+	if(length > SPI_DATA_BUFFER_LENGTH){
+		return;
+	}
+	const uint8_t* buf = buffers.at(nextBuffer).data();
+	std::memcpy(buf, tx, length);
+	// ---------------------------
+	modm::SpiTransferTask task = [buf, rx, length, configuration](){ //txPtr, rx, are a copy of the original pointer
 		if(configuration.pre.is_valid()){
 			configuration.pre();
 		}
-		modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(tx, rx, length);
+		transfer(buf, rx, length);
+		return true;
 	};
+	// ---------------------------
 	queue.push({.task = task, .cb = cb, .config = configuration });
+	nextBuffer++;
+	if(nextBuffer >= SPI_DATA_BUFFER_COUNT){
+		nextBuffer = 0;
+	}
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferNext(const uint8_t *tx,
+		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
+{
+	modm::SpiTransferTask task = [tx, rx, length, configuration](){ //txPtr, rx, are a copy of the original pointer
+		if(configuration.pre.is_valid()){
+			configuration.pre();
+		}
+		transfer(tx, rx, length);
+		return true;
+	};
+}
+
+template <class DmaChannelRx, class DmaChannelTx>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferNext(const uint8_t *tx,
 		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, 
 		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration)
 {
@@ -117,7 +149,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 				configuration.pre();
 			}
 			transfer(tx, rx, length);
+			return true;
 		}
+		return false;
 	};
 	queue.push({.task = task, .cb = cb, .config = configuration });
 }
@@ -134,13 +168,17 @@ template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::push(SpiTansferEntry&& entry)
 {
+	/// push entry onto queue if not full, remember if this is the first task on queue
 	bool instant = queue.empty();
 	if(!queue.full()){
 		queue.push(entry);
 	}
-	/// exec current task immediately
+	/// if this is the first task on queue, exec current task immediately
 	if(instant){
 		exec();
+	}
+	else{
+		/// just do nothing ... 
 	}
 }
 
@@ -148,12 +186,16 @@ template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::exec()
 {
+	/// exec the current task from queue if nothing else is going on
 	if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
 		const auto& entry = queue.front();
-		if(entry.config.pre.is_valid()){
-			entry.config.pre();
+		/// exec task now
+		bool didADmaThing = entry.task();
+		/// if task has not done anything, becasue its conditional failed
+		/// pretend that we are finished, but skip the post stuff of the given task
+		if(!didADmaThing){
+			end(true);
 		}
-		entry.task();
 	}
 }
 
@@ -189,18 +231,23 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDm
 
 template <class DmaChannelRx, class DmaChannelTx>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end()
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool skipPost)
 {
+	/// we finished a task thingy
 	if(dmaTransmitComplete && dmaReceiveComplete){
 		const auto& entry = queue.front();
-		if(entry.config.post.is_valid()){
-			entry.config.post();
+		/// do we want to skip its post stuff?
+		if(!skipPost){
+			/// d its post stuff
+			if(entry.config.post.is_valid()){
+				entry.config.post();
+			}
+			if(entry.cb.is_valid()){
+				entry.cb();
+			}
 		}
-		if(entry.cb.is_valid()){
-			entry.cb();
-		}
+		/// pop the task from queue
 		queue.pop();
-
 		/// re trgger ourselfs if necessary
 		exec();
 	}
@@ -227,7 +274,6 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 		Dma::RxChannel::setMemoryAddress(uint32_t(&dmaDummy));
 		Dma::RxChannel::setMemoryIncrementMode(false);
 	}
-
 
 	Dma::RxChannel::setDataLength(length);
 	dmaReceiveComplete = false;
