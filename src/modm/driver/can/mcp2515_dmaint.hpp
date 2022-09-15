@@ -196,13 +196,13 @@ private:
 		BIT_MODIFY = 0x05
 	};
 
-	void
+	static void
 	mcp2515ReadMessage();
 
-	bool
+	static bool
 	mcp2515IsReadyToSend(uint8_t status);
 
-	void
+	static void
 	mcp2515SendMessage(const can::Message& message);
 
 	static void
@@ -211,10 +211,10 @@ private:
 	static uint8_t
 	readRegister(uint8_t address);
 
-	void
+	static void
 	bitModify(uint8_t address, uint8_t mask, uint8_t data);
 
-	void
+	static void
 	writeIdentifierBuffer(const uint32_t& identifier, bool isExtendedFrame, uint8_t* buffer,
 						  uint8_t start_index);
 

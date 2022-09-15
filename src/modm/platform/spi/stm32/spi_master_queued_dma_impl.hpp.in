@@ -99,137 +99,6 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 
 template <class DmaChannelRx, class DmaChannelTx>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBegin(const uint8_t *tx,
-		uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
-{
-	if(length > SPI_DATA_BUFFER_LENGTH){
-		return;
-	}
-	const uint8_t* buf = buffers.at(nextBuffer).data();
-	std::memcpy(buf, tx, length);
-	// ---------------------------
-	auto task = createTask(buf, rx, length, {}, configuration);
-	queue.push({.task = task, .cb = cb, .config = configuration });
-	// ---------------------------
-	queue.push({.task = task, .cb = cb, .config = configuration });
-	nextBuffer++;
-	if(nextBuffer >= SPI_DATA_BUFFER_COUNT){
-		nextBuffer = 0;
-	}
-}
-
-
-template <class DmaChannelRx, class DmaChannelTx>
-template <typename Length>
-void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferNext(const uint8_t *tx,
-		uint8_t *rx, Length length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration)
-{
-	auto task = createTask(tx, rx, length, {}, configuration);
-	queue.push({.task = task, .cb = cb, .config = configuration });
-}
-
-template <class DmaChannelRx, class DmaChannelTx>
-template <typename Length>
-void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferNext(const uint8_t *tx,
-		uint8_t *rx, Length length, modm::SpiTransferCallback cb, 
-		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration)
-{
-	auto task = createTask(tx, rx, length, condition, configuration);
-	queue.push({.task = task, .cb = cb, .config = configuration });
-}
-
-
-template <class DmaChannelRx, class DmaChannelTx>
-template <typename Length>
-modm::SpiTransferTask modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::createTask(
-		const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, 
-		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration)
-{
-	return [tx, rx, length, condition, configuration](){
-		bool work = true;
-		if(condition.is_valid()){
-			work = condition();
-		}
-		if(work){
-			/// define length
-			size_t l = 0;
-			if constexpr(std::is_integral_v<Length>){
-				l = length;
-			}
-			else{
-				l = length();
-			}
-			/// check length
-			if (l == 0){
-				/// length irrelevant, do not do anything
-				work = false;
-			}
-			else{
-				/// we ha ve valid length
-				if(configuration.pre.is_valid()){
-					configuration.pre();
-				}
-				/// shall we really use dma ?
-				if(l == 1){
-					transfer(tx, rx, l);
-				}else{
-					rx[0] = transferBlockingSingleByte(tx[0]);
-				}
-			}
-		}
-		return work;
-	};
-}
-
-
-
-
-// template <class DmaChannelRx, class DmaChannelTx>
-// static void
-// modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(modm::platform::SpiMaster{{ id }}::SpiTransferTask, modm::platform::SpiMaster{{ id }}::SpiTransferCallback cb, SpiTransferConfiguration configuration)
-// {
-// 	push({.task = task, .cb = cb, .config = configuration });
-// }
-
-template <class DmaChannelRx, class DmaChannelTx>
-void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::push(SpiTansferEntry&& entry)
-{
-	/// push entry onto queue if not full, remember if this is the first task on queue
-	bool instant = queue.empty();
-	if(!queue.full()){
-		queue.push(entry);
-	}
-	/// if this is the first task on queue, exec current task immediately
-	if(instant){
-		exec();
-	}
-	else{
-		/// just do nothing ... 
-	}
-}
-
-template <class DmaChannelRx, class DmaChannelTx>
-void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::exec()
-{
-	/// exec the current task from queue if nothing else is going on
-	if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
-		const auto& entry = queue.front();
-		/// exec task now
-		bool didADmaThing = entry.task();
-		/// if task has not done anything, becasue its conditional failed
-		/// pretend that we are finished, but skip the post stuff of the given task
-		if(!didADmaThing){
-			end(true);
-		}
-	}
-}
-
-template <class DmaChannelRx, class DmaChannelTx>
-void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransferError()
 {
 	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
@@ -243,6 +112,7 @@ template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaReceiveComplete()
 {
+	MODM_LOG_INFO << "RxComplete" << modm::endl;
 	Dma::RxChannel::stop();
 	dmaReceiveComplete = true;
 	end();
@@ -252,6 +122,7 @@ template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransmitComplete()
 {
+	MODM_LOG_INFO << "TxComplete" << modm::endl;
 	Dma::TxChannel::stop();
 	dmaTransmitComplete = true;
 	end();
@@ -264,15 +135,16 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 {
 	/// we finished a task thingy
 	if(dmaTransmitComplete && dmaReceiveComplete){
-		const auto& entry = queue.front();
+		MODM_LOG_INFO << "End" << modm::endl;
+		const auto& entry = queue.back();
 		/// do we want to skip its post stuff?
 		if(!skipPost){
-			/// d its post stuff
-			if(entry.config.post.is_valid()){
-				entry.config.post();
+			/// do its post stuff
+			if(entry.step.configuration.post.is_valid()){
+				entry.step.configuration.post();
 			}
-			if(entry.cb.is_valid()){
-				entry.cb();
+			if(entry.step.cb.is_valid()){
+				entry.step.cb();
 			}
 		}
 		/// pop the task from queue
@@ -284,8 +156,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 
 template <class DmaChannelRx, class DmaChannelTx>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
-		uint8_t *rx, std::size_t length)
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx, uint8_t *rx, std::size_t length)
 {
 	dmaError = false;
 	SpiHal{{ id }}::enableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);
@@ -303,6 +174,8 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 		Dma::RxChannel::setMemoryAddress(uint32_t(&dmaDummy));
 		Dma::RxChannel::setMemoryIncrementMode(false);
 	}
+
+	MODM_LOG_INFO << "transfer [length: " << length << "]" << modm::endl; 
 
 	Dma::RxChannel::setDataLength(length);
 	dmaReceiveComplete = false;

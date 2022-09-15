@@ -19,6 +19,10 @@
 
 #include <etl/queue.h>
 #include <etl/delegate.h>
+#include <functional>
+
+#include <modm/debug.hpp>
+
 namespace modm
 {
 
@@ -48,22 +52,48 @@ struct Spi
 };
 
 
-// struct SpiTransferStep{
-// 	const uint8_t *tx;
-// 	uint8_t *rx; 
-// 	std::size_t length;
-// 	modm::SpiTransferCallback cb;
-// 	modm::SpiTransferConditional condition;
-// 	modm::SpiTransferConfiguration configuration;
-// };
 
 struct SpiTransferConfiguration{
 	etl::delegate<void()> pre;
 	etl::delegate<void()> post;
 };
-using SpiTransferTask = etl::delegate<bool()>;
 using SpiTransferCallback = etl::delegate<void()>;
 using SpiTransferConditional = etl::delegate<bool()>;
+// using SpiTransferLength = etl::delegate<std::size_t()>;
+using SpiTransferLength = std::function<std::size_t()>;
+
+class SpiTransferStep{
+public:
+	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_, auto configuration_){
+		tx = tx_;
+		rx = rx_;
+		if constexpr(std::is_integral_v<decltype(length_)>){
+			length = [length_](){return length_;};
+		}
+		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(cb_)>, decltype(nullptr)>){
+			cb = cb_;	
+		}
+		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(condition_)>, decltype(nullptr)>){
+			condition = condition_;	
+		}
+		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(configuration_)>, decltype(nullptr)>){
+			configuration_ = configuration_;	
+		}
+		MODM_LOG_INFO << "STEP" << modm::endl;
+		MODM_LOG_INFO << "    - LENGTH: " << length() << modm::endl;
+		MODM_LOG_INFO << "    - CB: " << cb.is_valid() << modm::endl;
+		MODM_LOG_INFO << "    - COND: " << condition.is_valid() << modm::endl;
+		MODM_LOG_INFO << "    - CFG pre: " << configuration.pre.is_valid() << modm::endl;
+		MODM_LOG_INFO << "    - CFG post: " << configuration.post.is_valid() << modm::endl;
+	}
+
+	const uint8_t *tx;
+	uint8_t *rx; 
+	SpiTransferLength length;
+	modm::SpiTransferCallback cb;
+	modm::SpiTransferConditional condition;
+	modm::SpiTransferConfiguration configuration;
+};
 
 } // namespace modm
 

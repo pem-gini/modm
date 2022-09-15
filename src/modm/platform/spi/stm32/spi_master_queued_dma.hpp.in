@@ -15,6 +15,8 @@
 #include <modm/platform/dma/dma.hpp>
 #include "spi_master_{{ id }}.hpp"
 
+#include <modm/debug.hpp>
+
 namespace modm
 {
 
@@ -39,10 +41,10 @@ template <class DmaChannelRx, class DmaChannelTx>
 class SpiMaster{{ id }}QueuedDma : public SpiMaster{{ id }}
 {
 private:
+	using SpiTransferTask = etl::delegate<bool(const SpiTransferStep& s)>;
 	struct SpiTansferEntry{
-		modm::SpiTransferTask task;
-		modm::SpiTransferCallback cb;
-		modm::SpiTransferConfiguration config;
+		SpiTransferTask task;
+		SpiTransferStep step;
 	};
 	using SpiTransferTaskQueue = etl::queue<SpiTansferEntry, 64>;
 	static constexpr size_t SPI_DATA_BUFFER_LENGTH = 64;
@@ -75,40 +77,91 @@ public:
 	static void
 	transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
 
-	static void
-	transferBegin(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
-
-	template <typename Length>
-	static void
-	transferNext(const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
-
-	template <typename Length>
-	static void
-	transferNext(const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
-
-	// static modm::ResumableResult<void>
-	// transfer(SpiTransferTask, SpiTransferCallback cb, SpiTransferConfiguration configuration = SpiTransferConfiguration{});
-
-	// template <typename... Steps>
-	// static constexpr void pipeline(SpiTransferStep step, Steps... rest){
-	// 	transferBegin(step.tx, step.rx, step.cb, step.configuration);
-	// 	std::apply([](auto&&... s){
-	// 		((transferNext(s.tx, s.rx, s.length, s.cb, s.condition, s.configuration)), ...);
-	// 	}, std::tie(rest...));
-	// };
+	template <typename... Steps>
+	static constexpr void pipeline(SpiTransferStep&& step, Steps... rest){
+		transferBegin(std::move(step));
+		std::apply([](auto&&... s){
+			((transferNext(s)), ...);
+		}, std::tie(rest...));
+		/// queue prepared, exec queue
+		exec();
+	};
 
 private:
-	static uint8_t
-	transferBlockingSingleByte(uint8_t b);
+	static constexpr void transferBegin(SpiTransferStep&& step){
+		auto length = step.length();
+		MODM_LOG_INFO << "transferBegin" <<modm::endl;
+		MODM_LOG_INFO << "l: " << length << modm::endl;
+		if(length > SPI_DATA_BUFFER_LENGTH){
+			MODM_LOG_INFO << "--- SKIP" <<modm::endl;
+			return;
+		}
+		uint8_t* buf = buffers.at(nextBuffer).data();
+		std::memcpy(buf, step.tx, length);
+		// ---------------------------
+		auto task = createTask();
+		push({.task = task, .step = step });
+		// ---------------------------
+		nextBuffer++;
+		if(nextBuffer >= SPI_DATA_BUFFER_COUNT){
+			nextBuffer = 0;
+		}
+	}
+
+	static constexpr void transferNext(auto&& step){
+		MODM_LOG_INFO << "transferNext" <<modm::endl;
+		auto task = createTask();
+		push({.task = task, .step = step });
+	}
+	static constexpr void transferNext(){}
+
+	static uint8_t transferBlockingSingleByte(uint8_t b);
 
 	static void 
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
-	template <typename Length>
-	modm::SpiTransferTask createTask(const uint8_t *tx, uint8_t *rx, Length length, modm::SpiTransferCallback cb, 
-		modm::SpiTransferConditional condition, modm::SpiTransferConfiguration& configuration);
+	static constexpr SpiTransferTask createTask(){
+		MODM_LOG_INFO << "CreateTask" << modm::endl;
+		return [](const SpiTransferStep& step){
+			bool work = true;
+			MODM_LOG_INFO << "CONDITION?" << modm::endl;
+			if(step.condition.is_valid()){
+				work = step.condition();
+				MODM_LOG_INFO << "CONDITION() = " << work << modm::endl;
+			}
+			MODM_LOG_INFO << "B" << modm::endl;
+			if(work){			
+				MODM_LOG_INFO << "DOING A TASK!!!" << modm::endl;
+				size_t length = step.length();
+				MODM_LOG_INFO << "F :::: Length = " << length << modm::endl;
+				/// check length
+				if (length == 0){
+					/// length irrelevant, do not do anything
+					work = false;
+				}
+				else{
+					MODM_LOG_INFO << "G" << modm::endl;
+					/// we ha ve valid length
+					if(step.configuration.pre.is_valid()){
+						MODM_LOG_INFO << "H" << modm::endl;
+						step.configuration.pre();
+					}
+					MODM_LOG_INFO << "I" << modm::endl;
+					/// shall we really use dma ?
+					if(length == 1){
+						MODM_LOG_INFO << "K" << modm::endl;
+						step.rx[0] = transferBlockingSingleByte(step.tx[0]);
+					}else{
+						MODM_LOG_INFO << "J" << modm::endl;
+						transfer(step.tx, step.rx, length);
+					}
+					MODM_LOG_INFO << "L" << modm::endl;
+				}
+			}
+			return work;
+		};
+	}
 
-private:
 	static void
 	handleDmaTransferError();
 	static void
@@ -116,14 +169,45 @@ private:
 	static void
 	handleDmaTransmitComplete();
 
-	static void push(SpiTansferEntry&& entry);
-	static void exec();
+
+	static constexpr void push(SpiTansferEntry&& entry)
+	{
+		/// push entry onto queue if not full
+		if(!queue.full()){
+			queue.push(entry);
+		}
+		MODM_LOG_INFO << "Push entry task " << entry.task.is_valid() << modm::endl;
+		MODM_LOG_INFO << "Push entry cb " << entry.step.cb.is_valid() << modm::endl;
+	}
+
+	static constexpr void exec()
+	{
+		MODM_LOG_INFO << "Exec " << !queue.empty() << modm::endl;
+		/// exec the current task from queue if nothing else is going on
+		if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
+			MODM_LOG_INFO << "execTask()" << modm::endl;
+			const auto& entry = queue.front();
+			MODM_LOG_INFO << "Exec entry task " << entry.task.is_valid() << modm::endl;
+			MODM_LOG_INFO << "Exec entry cb " << entry.step.cb.is_valid() << modm::endl;
+			// MODM_LOG_INFO << "Exec entry cfg pre " << entry.config.pre.is_valid() << modm::endl;
+			// MODM_LOG_INFO << "Exec entry cfg post " << entry.config.post.is_valid() << modm::endl;
+			/// exec task now
+			bool didADmaThing = entry.task(entry.step);
+			/// if task has not done anything, becasue its conditional failed
+			/// pretend that we are finished, but skip the post stuff of the given task
+			if(!didADmaThing){
+				end(true);
+			}
+		}
+	}
+
 	static void end(bool skipPost = false);
 
+private:
 
 	static inline bool dmaError { false };
-	static inline bool dmaTransmitComplete { false };
-	static inline bool dmaReceiveComplete { false };
+	static inline bool dmaTransmitComplete { true };
+	static inline bool dmaReceiveComplete { true };
 
 	// needed for transfers where no RX or TX buffers are given
 	static inline uint8_t dmaDummy { 0 };
