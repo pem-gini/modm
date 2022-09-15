@@ -185,10 +185,6 @@ private:
 		if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
 			MODM_LOG_INFO << "execTask()" << modm::endl;
 			const auto& entry = queue.front();
-			MODM_LOG_INFO << "Exec entry task " << entry.task.is_valid() << modm::endl;
-			MODM_LOG_INFO << "Exec entry cb " << (entry.step.cb != nullptr) << modm::endl;
-			// MODM_LOG_INFO << "Exec entry cfg pre " << entry.config.pre.is_valid() << modm::endl;
-			// MODM_LOG_INFO << "Exec entry cfg post " << entry.config.post.is_valid() << modm::endl;
 			/// exec task now
 			bool didADmaThing = entry.task(entry.step);
 			/// if task has not done anything, becasue its conditional failed

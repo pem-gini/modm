@@ -145,6 +145,12 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 	if(dmaTransmitComplete && dmaReceiveComplete){
 		MODM_LOG_INFO << "End" << modm::endl;
 		const auto& entry = queue.front();
+		MODM_LOG_INFO << "RX:::::::::::::::::::::::::::::::::: " << ((unsigned long)entry.step.rx) << modm::endl;
+		for(size_t i = 0; i < entry.step.length(); i++){
+			MODM_LOG_INFO << modm::hex << "0x" << entry.step.rx[i] << " "; 
+		}
+		MODM_LOG_INFO << modm::ascii << modm::endl; 
+
 		/// do we want to skip its post stuff?
 		if(!skipPost){
 			/// do its post stuff

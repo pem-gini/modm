@@ -112,7 +112,7 @@ namespace modm
 template<typename SPI, typename CS, typename INT>
 class Mcp2515DmaInt : public modm::Can
 {
-	inline static modm::SpiTransferConfiguration initCfg = modm::SpiTransferConfiguration{
+	inline static modm::SpiTransferConfiguration noCsCfg = modm::SpiTransferConfiguration{
 		.pre = [](){
 			SPI::setDataMode(SPI::DataMode::Mode0);
 			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
@@ -131,16 +131,25 @@ class Mcp2515DmaInt : public modm::Can
 		}
 	}; 
 
+	inline static modm::SpiTransferConfiguration CsReset = modm::SpiTransferConfiguration{
+		.pre = [](){
+			SPI::setDataMode(SPI::DataMode::Mode0);
+			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
+			CS::reset();
+		},
+		.post = [](){}
+	}; 
+	inline static modm::SpiTransferConfiguration CsSet = modm::SpiTransferConfiguration{
+		.pre = [](){
+			SPI::setDataMode(SPI::DataMode::Mode0);
+			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
+		},
+		.post = [](){
+			CS::set();
+		}
+	}; 
 public:
-	Mcp2515DmaInt()
-	{
-		modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
-			using namespace mcp2515;
-			modm::platform::Exti::disableInterrupts<INT>();
-			mcp2515ReadMessage();
-			modm::platform::Exti::enableInterrupts<INT>();
-		});
-	}
+	Mcp2515DmaInt(){}
 
 	template<frequency_t ExternalClock, bitrate_t bitrate = kbps(125), percent_t tolerance = pct(1)>
 	static bool
@@ -237,7 +246,6 @@ private:
 	static CS chipSelect;
 
 	inline static modm::can::Message messageBuffer;
-	inline static modm::can::Message txMessageBuffer;
 	inline static uint8_t statusBuffer = 0;
 	inline static uint8_t statusBufferR = 0;
 	inline static uint8_t statusBufferS = 0;
