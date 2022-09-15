@@ -59,12 +59,20 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	while (!SpiHal{{ id }}::isTransmitRegisterEmpty()){
 		/// ...
 	}
+
+	MODM_LOG_INFO << "TX: 0x" << modm::hex << data << modm::ascii << " "; 
+
 	// start transfer by copying data into register
 	SpiHal{{ id }}::write(data);
 	while(!SpiHal{{ id }}::isReceiveRegisterNotEmpty()){
 		/// ...
 	}
 	SpiHal{{ id }}::read(data);
+	
+	MODM_LOG_INFO << "RX: 0x" << modm::hex << data << modm::ascii << " "; 
+
+	MODM_LOG_INFO <<modm::endl; 
+
 	return data;
 }
 
@@ -136,14 +144,15 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 	/// we finished a task thingy
 	if(dmaTransmitComplete && dmaReceiveComplete){
 		MODM_LOG_INFO << "End" << modm::endl;
-		const auto& entry = queue.back();
+		const auto& entry = queue.front();
 		/// do we want to skip its post stuff?
 		if(!skipPost){
 			/// do its post stuff
 			if(entry.step.configuration.post.is_valid()){
+				MODM_LOG_INFO << "POST() CALL" << modm::endl;
 				entry.step.configuration.post();
 			}
-			if(entry.step.cb.is_valid()){
+			if(entry.step.cb){
 				entry.step.cb();
 			}
 		}
@@ -176,6 +185,10 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	}
 
 	MODM_LOG_INFO << "transfer [length: " << length << "]" << modm::endl; 
+	for(size_t i = 0; i < length; i++){
+		MODM_LOG_INFO << modm::hex << tx[i] << " "; 
+	}
+	MODM_LOG_INFO << modm::ascii << modm::endl; 
 
 	Dma::RxChannel::setDataLength(length);
 	dmaReceiveComplete = false;

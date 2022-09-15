@@ -148,13 +148,13 @@ private:
 					}
 					MODM_LOG_INFO << "I" << modm::endl;
 					/// shall we really use dma ?
-					if(length == 1){
-						MODM_LOG_INFO << "K" << modm::endl;
-						step.rx[0] = transferBlockingSingleByte(step.tx[0]);
-					}else{
+					// if(length == 1){
+					// 	MODM_LOG_INFO << "K" << modm::endl;
+					// 	step.rx[0] = transferBlockingSingleByte(step.tx[0]);
+					// }else{
 						MODM_LOG_INFO << "J" << modm::endl;
 						transfer(step.tx, step.rx, length);
-					}
+					// }
 					MODM_LOG_INFO << "L" << modm::endl;
 				}
 			}
@@ -176,8 +176,6 @@ private:
 		if(!queue.full()){
 			queue.push(entry);
 		}
-		MODM_LOG_INFO << "Push entry task " << entry.task.is_valid() << modm::endl;
-		MODM_LOG_INFO << "Push entry cb " << entry.step.cb.is_valid() << modm::endl;
 	}
 
 	static constexpr void exec()
@@ -188,7 +186,7 @@ private:
 			MODM_LOG_INFO << "execTask()" << modm::endl;
 			const auto& entry = queue.front();
 			MODM_LOG_INFO << "Exec entry task " << entry.task.is_valid() << modm::endl;
-			MODM_LOG_INFO << "Exec entry cb " << entry.step.cb.is_valid() << modm::endl;
+			MODM_LOG_INFO << "Exec entry cb " << (entry.step.cb != nullptr) << modm::endl;
 			// MODM_LOG_INFO << "Exec entry cfg pre " << entry.config.pre.is_valid() << modm::endl;
 			// MODM_LOG_INFO << "Exec entry cfg post " << entry.config.post.is_valid() << modm::endl;
 			/// exec task now

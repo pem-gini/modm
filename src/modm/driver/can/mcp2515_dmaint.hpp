@@ -30,6 +30,8 @@
 #include "mcp2515_definitions.hpp"
 #include "mcp2515_options.hpp"
 
+#include <etl/circular_buffer.h>
+
 #ifdef __DOXYGEN__
 
 /**
@@ -110,6 +112,14 @@ namespace modm
 template<typename SPI, typename CS, typename INT>
 class Mcp2515DmaInt : public modm::Can
 {
+	inline static modm::SpiTransferConfiguration initCfg = modm::SpiTransferConfiguration{
+		.pre = [](){
+			SPI::setDataMode(SPI::DataMode::Mode0);
+			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
+		},
+		.post = [](){}
+	}; 
+	
 	inline static modm::SpiTransferConfiguration configuration = modm::SpiTransferConfiguration{
 		.pre = [](){
 			SPI::setDataMode(SPI::DataMode::Mode0);
@@ -142,10 +152,10 @@ private:
 							uint8_t ps2);
 
 public:
-	void
+	static void
 	setFilter(accessor::Flash<uint8_t> filter);
 
-	void
+	static void
 	setMode(Can::Mode mode);
 
 	static inline bool
@@ -227,6 +237,7 @@ private:
 	static CS chipSelect;
 
 	inline static modm::can::Message messageBuffer;
+	inline static modm::can::Message txMessageBuffer;
 	inline static uint8_t statusBuffer = 0;
 	inline static uint8_t statusBufferR = 0;
 	inline static uint8_t statusBufferS = 0;

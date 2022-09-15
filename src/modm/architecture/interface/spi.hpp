@@ -57,7 +57,7 @@ struct SpiTransferConfiguration{
 	etl::delegate<void()> pre;
 	etl::delegate<void()> post;
 };
-using SpiTransferCallback = etl::delegate<void()>;
+using SpiTransferCallback = std::function<void()>;
 using SpiTransferConditional = etl::delegate<bool()>;
 // using SpiTransferLength = etl::delegate<std::size_t()>;
 using SpiTransferLength = std::function<std::size_t()>;
@@ -70,18 +70,21 @@ public:
 		if constexpr(std::is_integral_v<decltype(length_)>){
 			length = [length_](){return length_;};
 		}
-		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(cb_)>, decltype(nullptr)>){
-			cb = cb_;	
+		else{
+			length = length_;
 		}
+		// if constexpr(!std::is_same_v<std::remove_reference_t<decltype(cb_)>, decltype(nullptr)>){
+		cb = cb_;	/// std::function can be assigned to nullptr if empty
+		// }
 		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(condition_)>, decltype(nullptr)>){
 			condition = condition_;	
 		}
 		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(configuration_)>, decltype(nullptr)>){
-			configuration_ = configuration_;	
+			configuration = configuration_;	
 		}
 		MODM_LOG_INFO << "STEP" << modm::endl;
 		MODM_LOG_INFO << "    - LENGTH: " << length() << modm::endl;
-		MODM_LOG_INFO << "    - CB: " << cb.is_valid() << modm::endl;
+		MODM_LOG_INFO << "    - CB: " << (cb != nullptr) << modm::endl;
 		MODM_LOG_INFO << "    - COND: " << condition.is_valid() << modm::endl;
 		MODM_LOG_INFO << "    - CFG pre: " << configuration.pre.is_valid() << modm::endl;
 		MODM_LOG_INFO << "    - CFG post: " << configuration.post.is_valid() << modm::endl;
