@@ -111,43 +111,16 @@ namespace modm
  */
 template<typename SPI, typename CS, typename INT>
 class Mcp2515DmaInt : public modm::Can
-{
-	inline static modm::SpiTransferConfiguration noCsCfg = modm::SpiTransferConfiguration{
-		.pre = [](){
-			SPI::setDataMode(SPI::DataMode::Mode0);
-			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
-		},
-		.post = [](){}
-	}; 
-	
+{	
 	inline static modm::SpiTransferConfiguration configuration = modm::SpiTransferConfiguration{
 		.pre = [](){
 			SPI::setDataMode(SPI::DataMode::Mode0);
 			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
-			CS::reset();
 		},
 		.post = [](){
-			CS::set();
 		}
 	}; 
 
-	inline static modm::SpiTransferConfiguration CsReset = modm::SpiTransferConfiguration{
-		.pre = [](){
-			SPI::setDataMode(SPI::DataMode::Mode0);
-			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
-			CS::reset();
-		},
-		.post = [](){}
-	}; 
-	inline static modm::SpiTransferConfiguration CsSet = modm::SpiTransferConfiguration{
-		.pre = [](){
-			SPI::setDataMode(SPI::DataMode::Mode0);
-			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
-		},
-		.post = [](){
-			CS::set();
-		}
-	}; 
 public:
 	Mcp2515DmaInt(){}
 

@@ -61,10 +61,24 @@ using SpiTransferCallback = std::function<void()>;
 using SpiTransferConditional = etl::delegate<bool()>;
 // using SpiTransferLength = etl::delegate<std::size_t()>;
 using SpiTransferLength = std::function<std::size_t()>;
+using SpiTransferCs = std::function<void()>;
+
+enum class ChipSelectBehavior{
+	NONE,
+	RESET,
+	SET,
+	TOGGLE
+};
+
+template<typename GPIO>
+struct SpiTransferChipSelectBehavior{
+	using CS = GPIO;
+	ChipSelectBehavior behavior = ChipSelectBehavior::NONE;
+};
 
 class SpiTransferStep{
 public:
-	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_, auto configuration_){
+	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_, auto configuration_, SpiTransferChipSelectBehavior<auto> csbehavior){
 		tx = tx_;
 		rx = rx_;
 		if constexpr(std::is_integral_v<decltype(length_)>){
@@ -82,6 +96,23 @@ public:
 		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(configuration_)>, decltype(nullptr)>){
 			configuration = configuration_;	
 		}
+
+		csPre = [csbehavior](){
+			switch(csbehavior.behavior){
+				case ChipSelectBehavior::NONE: break;
+				case ChipSelectBehavior::RESET: decltype(csbehavior)::CS::reset(); break;
+				case ChipSelectBehavior::TOGGLE: decltype(csbehavior)::CS::reset(); break;
+				default: break;
+			};
+		};
+		csPost = [csbehavior](){
+			switch(csbehavior.behavior){
+				case ChipSelectBehavior::NONE: break;
+				case ChipSelectBehavior::SET: decltype(csbehavior)::CS::set(); break;
+				case ChipSelectBehavior::TOGGLE: decltype(csbehavior)::CS::set(); break;
+				default: break;
+			};
+		};
 		MODM_LOG_INFO << "STEP" << modm::endl;
 		MODM_LOG_INFO << "    - LENGTH: " << length() << modm::endl;
 		MODM_LOG_INFO << "    - CB: " << (cb != nullptr) << modm::endl;
@@ -96,6 +127,8 @@ public:
 	modm::SpiTransferCallback cb;
 	modm::SpiTransferConditional condition;
 	modm::SpiTransferConfiguration configuration;
+	modm::SpiTransferCs csPre;
+	modm::SpiTransferCs csPost;
 };
 
 } // namespace modm

@@ -77,28 +77,45 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
+template<typename CS>
 uint8_t
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration)
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data,
+		 modm::SpiTransferConfiguration& configuration, SpiTransferChipSelectBehavior<CS> csbehavior)
 {
 	if(configuration.pre.is_valid()){
 		configuration.pre();
 	}
+	if (csbehavior.behavior == ChipSelectBehavior::RESET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
+		decltype(csbehavior)::CS::reset();
+	}
 	uint8_t read = transferBlockingSingleByte(data);
+	if (csbehavior.behavior == ChipSelectBehavior::SET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
+		decltype(csbehavior)::CS::set();
+	}
 	if(configuration.post.is_valid()){
 		configuration.post();
 	}
+
 	return read;
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
+template<typename CS>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration){
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
+		modm::SpiTransferConfiguration& configuration, SpiTransferChipSelectBehavior<CS> csbehavior){
 	if(configuration.pre.is_valid()){
 		configuration.pre();
+	}
+	if (csbehavior.behavior == ChipSelectBehavior::RESET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
+		decltype(csbehavior)::CS::reset();
 	}
 	for(size_t i = 0; i < length; i++){
 		uint8_t b = tx[i];
 		rx[i] = transferBlockingSingleByte(b);
+	}
+	if (csbehavior.behavior == ChipSelectBehavior::SET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
+		decltype(csbehavior)::CS::set();
 	}
 	if(configuration.post.is_valid()){
 		configuration.post();
@@ -158,6 +175,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 				MODM_LOG_INFO << "POST() CALL" << modm::endl;
 				entry.step.configuration.post();
 			}
+			/// call cs post behavor
+			entry.step.csPost();
+			/// call step callback
 			if(entry.step.cb){
 				entry.step.cb();
 			}

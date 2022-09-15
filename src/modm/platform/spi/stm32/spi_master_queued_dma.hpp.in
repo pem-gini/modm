@@ -71,11 +71,14 @@ public:
 	static void
 	initialize();
 
+	template<typename CS>
 	static uint8_t
-	transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+	transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration, SpiTransferChipSelectBehavior<CS> csbehavior);
 
+	template<typename CS>
 	static void
-	transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration = modm::SpiTransferConfiguration{});
+	transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, modm::SpiTransferConfiguration& configuration, SpiTransferChipSelectBehavior<CS> csbehavior);
+
 
 	template <typename... Steps>
 	static constexpr void pipeline(SpiTransferStep&& step, Steps... rest){
@@ -146,7 +149,8 @@ private:
 						MODM_LOG_INFO << "H" << modm::endl;
 						step.configuration.pre();
 					}
-					MODM_LOG_INFO << "I" << modm::endl;
+					/// call cs pre behavor
+					step.csPre();
 					/// shall we really use dma ?
 					// if(length == 1){
 					// 	MODM_LOG_INFO << "K" << modm::endl;
