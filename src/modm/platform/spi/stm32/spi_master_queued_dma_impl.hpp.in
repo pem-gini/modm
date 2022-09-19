@@ -60,8 +60,6 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 		/// ...
 	}
 
-	MODM_LOG_INFO << "TX: 0x" << modm::hex << data << modm::ascii << " "; 
-
 	// start transfer by copying data into register
 	SpiHal{{ id }}::write(data);
 	while(!SpiHal{{ id }}::isReceiveRegisterNotEmpty()){
@@ -69,55 +67,43 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	}
 	SpiHal{{ id }}::read(data);
 	
-	MODM_LOG_INFO << "RX: 0x" << modm::hex << data << modm::ascii << " "; 
-
-	MODM_LOG_INFO <<modm::endl; 
-
 	return data;
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
-template<typename CS>
 uint8_t
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data,
-		 modm::SpiTransferConfiguration& configuration, SpiTransferChipSelectBehavior<CS> csbehavior)
+		modm::SpiTransferConfiguration& configuration, 
+		SpiTransferChipSelectBehavior&& csbehavior)
 {
-	if(configuration.pre.is_valid()){
+	if(configuration.pre){
 		configuration.pre();
 	}
-	if (csbehavior.behavior == ChipSelectBehavior::RESET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
-		decltype(csbehavior)::CS::reset();
-	}
+	csbehavior.pre();
 	uint8_t read = transferBlockingSingleByte(data);
-	if (csbehavior.behavior == ChipSelectBehavior::SET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
-		decltype(csbehavior)::CS::set();
-	}
-	if(configuration.post.is_valid()){
+	csbehavior.post();
+	if(configuration.post){
 		configuration.post();
 	}
-
 	return read;
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
-template<typename CS>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
-		modm::SpiTransferConfiguration& configuration, SpiTransferChipSelectBehavior<CS> csbehavior){
-	if(configuration.pre.is_valid()){
+		modm::SpiTransferConfiguration& configuration, 
+		SpiTransferChipSelectBehavior&& csbehavior)
+{
+	if(configuration.pre){
 		configuration.pre();
 	}
-	if (csbehavior.behavior == ChipSelectBehavior::RESET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
-		decltype(csbehavior)::CS::reset();
-	}
+	csbehavior.pre();
 	for(size_t i = 0; i < length; i++){
 		uint8_t b = tx[i];
 		rx[i] = transferBlockingSingleByte(b);
 	}
-	if (csbehavior.behavior == ChipSelectBehavior::SET || csbehavior.behavior == ChipSelectBehavior::TOGGLE){
-		decltype(csbehavior)::CS::set();
-	}
-	if(configuration.post.is_valid()){
+	csbehavior.post();
+	if(configuration.post){
 		configuration.post();
 	}
 }
@@ -137,7 +123,6 @@ template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaReceiveComplete()
 {
-	MODM_LOG_INFO << "RxComplete" << modm::endl;
 	Dma::RxChannel::stop();
 	dmaReceiveComplete = true;
 	end();
@@ -147,12 +132,10 @@ template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransmitComplete()
 {
-	MODM_LOG_INFO << "TxComplete" << modm::endl;
 	Dma::TxChannel::stop();
 	dmaTransmitComplete = true;
 	end();
 }
-
 
 template <class DmaChannelRx, class DmaChannelTx>
 void
@@ -160,23 +143,15 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 {
 	/// we finished a task thingy
 	if(dmaTransmitComplete && dmaReceiveComplete){
-		MODM_LOG_INFO << "End" << modm::endl;
 		const auto& entry = queue.front();
-		MODM_LOG_INFO << "RX:::::::::::::::::::::::::::::::::: " << ((unsigned long)entry.step.rx) << modm::endl;
-		for(size_t i = 0; i < entry.step.length(); i++){
-			MODM_LOG_INFO << modm::hex << "0x" << entry.step.rx[i] << " "; 
-		}
-		MODM_LOG_INFO << modm::ascii << modm::endl; 
-
 		/// do we want to skip its post stuff?
 		if(!skipPost){
 			/// do its post stuff
-			if(entry.step.configuration.post.is_valid()){
-				MODM_LOG_INFO << "POST() CALL" << modm::endl;
+			if(entry.step.configuration.post){
 				entry.step.configuration.post();
 			}
 			/// call cs post behavor
-			entry.step.csPost();
+			entry.step.cs.post();
 			/// call step callback
 			if(entry.step.cb){
 				entry.step.cb();
@@ -209,12 +184,6 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 		Dma::RxChannel::setMemoryAddress(uint32_t(&dmaDummy));
 		Dma::RxChannel::setMemoryIncrementMode(false);
 	}
-
-	MODM_LOG_INFO << "transfer [length: " << length << "]" << modm::endl; 
-	for(size_t i = 0; i < length; i++){
-		MODM_LOG_INFO << modm::hex << tx[i] << " "; 
-	}
-	MODM_LOG_INFO << modm::ascii << modm::endl; 
 
 	Dma::RxChannel::setDataLength(length);
 	dmaReceiveComplete = false;

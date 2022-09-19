@@ -57,9 +57,10 @@ struct SpiTransferConfiguration{
 	etl::delegate<void()> pre;
 	etl::delegate<void()> post;
 };
-using SpiTransferCallback = std::function<void()>;
-using SpiTransferConditional = etl::delegate<bool()>;
+// using SpiTransferConditional = etl::delegate<bool()>;
 // using SpiTransferLength = etl::delegate<std::size_t()>;
+using SpiTransferCallback = std::function<void()>;
+using SpiTransferConditional = std::function<bool()>;
 using SpiTransferLength = std::function<std::size_t()>;
 using SpiTransferCs = std::function<void()>;
 
@@ -70,65 +71,70 @@ enum class ChipSelectBehavior{
 	TOGGLE
 };
 
-template<typename GPIO>
-struct SpiTransferChipSelectBehavior{
+template <typename GPIO>
+struct ChipSelectBehaviorWrapper{
 	using CS = GPIO;
-	ChipSelectBehavior behavior = ChipSelectBehavior::NONE;
+	ChipSelectBehavior behavior;
 };
+class SpiTransferChipSelectBehavior{
+public:
+	SpiTransferChipSelectBehavior(auto wrapper) :
+		pre{[wrapper](){
+			if constexpr (!std::is_void<typename decltype(wrapper)::CS>::value){
+				switch(wrapper.behavior){
+					case ChipSelectBehavior::NONE: break;
+					case ChipSelectBehavior::RESET: decltype(wrapper)::CS::reset(); break;
+					case ChipSelectBehavior::TOGGLE: decltype(wrapper)::CS::reset(); break;
+					default: break;
+				};
+			}
+		}},
+		post{[wrapper](){
+			if constexpr (!std::is_void<typename decltype(wrapper)::CS>::value){
+				switch(wrapper.behavior){
+					case ChipSelectBehavior::NONE: break;
+					case ChipSelectBehavior::SET: decltype(wrapper)::CS::set(); break;
+					case ChipSelectBehavior::TOGGLE: decltype(wrapper)::CS::set(); break;
+					default: break;
+				};
+			}
+		}}{}
+
+	modm::SpiTransferCs pre;
+	modm::SpiTransferCs post;
+};
+
+template<typename CS = void>
+static constexpr SpiTransferChipSelectBehavior CsBehavior(ChipSelectBehavior behavior = ChipSelectBehavior::NONE){
+	ChipSelectBehaviorWrapper<CS> wrapper{behavior};
+	SpiTransferChipSelectBehavior cs = SpiTransferChipSelectBehavior(wrapper);
+	return cs;
+}
 
 class SpiTransferStep{
 public:
-	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_, auto configuration_, SpiTransferChipSelectBehavior<auto> csbehavior){
-		tx = tx_;
-		rx = rx_;
-		if constexpr(std::is_integral_v<decltype(length_)>){
-			length = [length_](){return length_;};
-		}
-		else{
+	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_,
+					auto configuration_, SpiTransferChipSelectBehavior csbehavior = CsBehavior<void>())
+		: tx{tx_},
+		  rx{rx_},
+		  cb{cb_},
+		  condition{condition_},
+		  configuration{configuration_},
+		  cs{csbehavior}
+	{
+		if constexpr (std::is_integral_v<decltype(length_)>){
+			length = [length_]() { return length_; };
+		} else{
 			length = length_;
 		}
-		// if constexpr(!std::is_same_v<std::remove_reference_t<decltype(cb_)>, decltype(nullptr)>){
-		cb = cb_;	/// std::function can be assigned to nullptr if empty
-		// }
-		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(condition_)>, decltype(nullptr)>){
-			condition = condition_;	
-		}
-		if constexpr(!std::is_same_v<std::remove_reference_t<decltype(configuration_)>, decltype(nullptr)>){
-			configuration = configuration_;	
-		}
-
-		csPre = [csbehavior](){
-			switch(csbehavior.behavior){
-				case ChipSelectBehavior::NONE: break;
-				case ChipSelectBehavior::RESET: decltype(csbehavior)::CS::reset(); break;
-				case ChipSelectBehavior::TOGGLE: decltype(csbehavior)::CS::reset(); break;
-				default: break;
-			};
-		};
-		csPost = [csbehavior](){
-			switch(csbehavior.behavior){
-				case ChipSelectBehavior::NONE: break;
-				case ChipSelectBehavior::SET: decltype(csbehavior)::CS::set(); break;
-				case ChipSelectBehavior::TOGGLE: decltype(csbehavior)::CS::set(); break;
-				default: break;
-			};
-		};
-		MODM_LOG_INFO << "STEP" << modm::endl;
-		MODM_LOG_INFO << "    - LENGTH: " << length() << modm::endl;
-		MODM_LOG_INFO << "    - CB: " << (cb != nullptr) << modm::endl;
-		MODM_LOG_INFO << "    - COND: " << condition.is_valid() << modm::endl;
-		MODM_LOG_INFO << "    - CFG pre: " << configuration.pre.is_valid() << modm::endl;
-		MODM_LOG_INFO << "    - CFG post: " << configuration.post.is_valid() << modm::endl;
 	}
-
 	const uint8_t *tx;
 	uint8_t *rx; 
 	SpiTransferLength length;
 	modm::SpiTransferCallback cb;
 	modm::SpiTransferConditional condition;
 	modm::SpiTransferConfiguration configuration;
-	modm::SpiTransferCs csPre;
-	modm::SpiTransferCs csPost;
+	modm::SpiTransferChipSelectBehavior cs;
 };
 
 } // namespace modm

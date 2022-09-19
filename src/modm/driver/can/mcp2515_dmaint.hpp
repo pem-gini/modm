@@ -30,8 +30,6 @@
 #include "mcp2515_definitions.hpp"
 #include "mcp2515_options.hpp"
 
-#include <etl/circular_buffer.h>
-
 #ifdef __DOXYGEN__
 
 /**

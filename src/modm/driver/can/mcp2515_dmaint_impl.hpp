@@ -49,7 +49,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initializeWithPrescaler(uint8_t prescaler /* 
 	// software reset for the mcp2515, after this the chip is back in the
 	// configuration mode
 	chipSelect.reset();
-	spi.transferBlocking(RESET, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(RESET, configuration);
 	// modm::delay_ms(1);
 	chipSelect.set();
 
@@ -57,14 +57,14 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initializeWithPrescaler(uint8_t prescaler /* 
 	modm::delay_ms(30);
 
 	chipSelect.reset();
-	spi.transferBlocking(WRITE, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(CNF3, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(WRITE, configuration);
+	spi.transferBlocking(CNF3, configuration);
 
 	// load CNF1..3
-	spi.transferBlocking(cnf, nullptr, 3, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(cnf, nullptr, 3, configuration);
 
 	// enable interrupts
-	spi.transferBlocking(RX1IE | RX0IE, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(RX1IE | RX0IE, configuration);
 	chipSelect.set();
 
 	// set TXnRTS pins as inwrites
@@ -127,14 +127,14 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::setFilter(accessor::Flash<uint8_t> filter)
 	for (i = 0; i < 0x30; i += 0x10)
 	{
 		chipSelect.reset();
-		spi.transferBlocking(WRITE, configuration, SpiTransferChipSelectBehavior<CS>{});
-		spi.transferBlocking(i, configuration, SpiTransferChipSelectBehavior<CS>{});
+		spi.transferBlocking(WRITE, configuration);
+		spi.transferBlocking(i, configuration);
 
 		for (j = 0; j < 12; j++)
 		{
 			if (i == 0x20 && j >= 0x08) break;
 
-			spi.transferBlocking(*filter++, configuration, SpiTransferChipSelectBehavior<CS>{});
+			spi.transferBlocking(*filter++, configuration);
 		}
 		chipSelect.set();
 	}
@@ -233,10 +233,6 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 
 	auto copyResultCanMessage = [&]() {
 		std::memcpy(messageBuffer.data, rx_buf, messageBuffer.length);
-		for(size_t i = 0; i < messageBuffer.length; i++){
-			MODM_LOG_INFO << modm::hex << "0x" << messageBuffer.data[i] << " "; 
-		}
-		MODM_LOG_INFO << modm::ascii << modm::endl; 
 		if (not modm_assert_continue_ignore(rxQueue.push(messageBuffer), "mcp2515.can.tx",
 			"CAN transmit software buffer overflowed!", 1)){}
 	};
@@ -299,9 +295,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	tx_buf[0] = RX_STATUS;
 	tx_buf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, SpiTransferChipSelectBehavior<CS>{ChipSelectBehavior::TOGGLE}},
-		SpiTransferStep{tx_buf, rx_buf, 6, readCanMessage, [&](){return readSuccessfulFlag;}, configuration, SpiTransferChipSelectBehavior<CS>{ChipSelectBehavior::RESET}},
-		SpiTransferStep{tx_buf, rx_buf, [&](){return messageBuffer.length;}, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration, SpiTransferChipSelectBehavior<CS>{ChipSelectBehavior::SET}}
+		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration},
+		SpiTransferStep{tx_buf, rx_buf, 6, readCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelectBehavior::RESET)},
+		SpiTransferStep{tx_buf, rx_buf, [&](){return messageBuffer.length;}, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelectBehavior::SET)}
 	);
 }
 
@@ -365,18 +361,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 					// RF_CALL(spi.transfer(message.length));
 					tx_buf[5] = message.length;
 					// payload:
-					MODM_LOG_INFO << "))))))))))))))))))))))))))))))))))))" << modm::endl;
-					for(size_t i = 0; i < message.length; i++){
-						MODM_LOG_INFO << modm::hex << "0x" << message.data[i] << " "; 
-					}
-					MODM_LOG_INFO << modm::ascii << modm::endl; 
-					MODM_LOG_INFO << "))))))))))))))))))))))))))))))))))))" << modm::endl;
 					std::memcpy(&tx_buf[6], message.data, message.length);
-					for(size_t i = 0; i < message.length; i++){
-						MODM_LOG_INFO << modm::hex << "0x" << tx_buf[i] << " "; 
-					}
-					MODM_LOG_INFO << modm::ascii << modm::endl; 
-
 				}
 			}
 		}
@@ -391,9 +376,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 	tx_buf[0] = READ_STATUS;
 	tx_buf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, statusPost, nullptr, configuration, SpiTransferChipSelectBehavior<CS>{ChipSelectBehavior::TOGGLE}},
-		SpiTransferStep{tx_buf, rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration, SpiTransferChipSelectBehavior<CS>{ChipSelectBehavior::TOGGLE}},
-		SpiTransferStep{tx_buf, rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration, SpiTransferChipSelectBehavior<CS>{ChipSelectBehavior::TOGGLE}} // skip if no free tx buffer
+		SpiTransferStep{tx_buf, rx_buf, 2, statusPost, nullptr, configuration},
+		SpiTransferStep{tx_buf, rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration},
+		SpiTransferStep{tx_buf, rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration} // skip if no free tx buffer
 	);
 }
 // ----------------------------------------------------------------------------
@@ -405,9 +390,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::writeRegister(uint8_t address, uint8_t data)
 	using namespace mcp2515;
 
 	chipSelect.reset();
-	spi.transferBlocking(WRITE, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(address, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(data, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(WRITE, configuration);
+	spi.transferBlocking(address, configuration);
+	spi.transferBlocking(data, configuration);
 	chipSelect.set();
 }
 
@@ -418,9 +403,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::readRegister(uint8_t address)
 	using namespace mcp2515;
 
 	chipSelect.reset();
-	spi.transferBlocking(READ, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(address, configuration, SpiTransferChipSelectBehavior<CS>{});
-	uint8_t data = spi.transferBlocking(0xff, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(READ, configuration);
+	spi.transferBlocking(address, configuration);
+	uint8_t data = spi.transferBlocking(0xff, configuration);
 	chipSelect.set();
 	return data;
 }
@@ -432,10 +417,10 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::bitModify(uint8_t address, uint8_t mask, uint
 	using namespace mcp2515;
 
 	chipSelect.reset();
-	spi.transferBlocking(BIT_MODIFY, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(address, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(mask, configuration, SpiTransferChipSelectBehavior<CS>{});
-	spi.transferBlocking(data, configuration, SpiTransferChipSelectBehavior<CS>{});
+	spi.transferBlocking(BIT_MODIFY, configuration);
+	spi.transferBlocking(address, configuration);
+	spi.transferBlocking(mask, configuration);
+	spi.transferBlocking(data, configuration);
 	chipSelect.set();
 }
 
