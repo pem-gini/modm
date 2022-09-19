@@ -13,10 +13,10 @@
 #	error 	"Don't include this file directly, use 'spi_master_{{ id }}__Queued_Dma.hpp' instead!"
 #endif
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 template <class SystemClock, modm::baudrate_t baudrate, modm::percent_t tolerance>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::initialize()
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE, SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::initialize()
 {
 	// Configure the DMA channels, then calls SpiMaster{{ id }}::initialzie().
 	Dma::RxChannel::configure(DmaBase::DataTransferDirection::PeripheralToMemory,
@@ -50,9 +50,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::initiali
 %% endif
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 uint8_t
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlockingSingleByte(uint8_t data){
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE, SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transferBlockingSingleByte(uint8_t data){
 	// disable DMA for single byte transfer
 	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);
 	// wait for previous transfer to finish
@@ -70,9 +70,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	return data;
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 uint8_t
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(uint8_t data,
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transferBlocking(uint8_t data,
 		modm::SpiTransferConfiguration& configuration, 
 		SpiTransferChipSelectBehavior&& csbehavior)
 {
@@ -88,9 +88,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	return read;
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
 		modm::SpiTransferConfiguration& configuration, 
 		SpiTransferChipSelectBehavior&& csbehavior)
 {
@@ -108,9 +108,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer
 	}
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransferError()
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransferError()
 {
 	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
 			SpiBase::Interrupt::RxDmaEnable);
@@ -119,27 +119,27 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDm
 	dmaError = true;
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaReceiveComplete()
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaReceiveComplete()
 {
 	Dma::RxChannel::stop();
 	dmaReceiveComplete = true;
 	end();
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::handleDmaTransmitComplete()
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransmitComplete()
 {
 	Dma::TxChannel::stop();
 	dmaTransmitComplete = true;
 	end();
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool skipPost)
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::end(bool skipPost)
 {
 	/// we finished a task thingy
 	if(dmaTransmitComplete && dmaReceiveComplete){
@@ -164,9 +164,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::end(bool
 	}
 }
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
-modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx, uint8_t *rx, std::size_t length)
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transfer(const uint8_t *tx, uint8_t *rx, std::size_t length)
 {
 	dmaError = false;
 	SpiHal{{ id }}::enableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);

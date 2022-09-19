@@ -35,7 +35,7 @@ namespace platform
  * @ingroup	modm_platform_spi modm_platform_spi_{{id}}
  */
 
-template <class DmaChannelRx, class DmaChannelTx>
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE = 32, size_t SPI_DATA_BUFFER_COUNT = 16, size_t SPI_DATA_BUFFER_LENGTH = 32>
 class SpiMaster{{ id }}QueuedDma : public SpiMaster{{ id }}
 {
 private:
@@ -44,9 +44,7 @@ private:
 		SpiTransferTask task;
 		SpiTransferStep step;
 	};
-	using SpiTransferTaskQueue = etl::queue<SpiTansferEntry, 64>;
-	static constexpr size_t SPI_DATA_BUFFER_LENGTH = 64;
-	static constexpr size_t SPI_DATA_BUFFER_COUNT = 32;
+	using SpiTransferTaskQueue = etl::queue<SpiTansferEntry, QUEUE_SIZE>;
 	using SpiDataBuffer = std::array<uint8_t,SPI_DATA_BUFFER_LENGTH>;
 	using SpiDataQueue = std::array<SpiDataBuffer, SPI_DATA_BUFFER_COUNT>;
 
