@@ -159,18 +159,6 @@ modm::platform::SpiMaster{{ id }}_Dma<DmaChannelRx, DmaChannelTx>::transfer(cons
 }
 
 template <class DmaChannelRx, class DmaChannelTx>
-modm::ResumableResult<void>
-modm::platform::SpiMaster{{ id }}_Dma<DmaChannelRx, DmaChannelTx>::transfer(const uint8_t *tx,
-		uint8_t *rx, std::size_t length, modm::platform::SpiMaster{{ id }}::SpiTransferCallback cb)
-{
-	lastCb = cb;
-	lastTx = tx;
-	lastRx = rx;
-	lastLength = length;
-	return transfer(tx, rx, length);
-}
-
-template <class DmaChannelRx, class DmaChannelTx>
 void
 modm::platform::SpiMaster{{ id }}_Dma<DmaChannelRx, DmaChannelTx>::handleDmaTransferError()
 {

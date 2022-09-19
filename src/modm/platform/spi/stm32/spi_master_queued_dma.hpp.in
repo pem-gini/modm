@@ -113,8 +113,14 @@ private:
 
 	static uint8_t transferBlockingSingleByte(uint8_t b);
 
-	static void 
+	static modm::ResumableResult<uint8_t>
+	transfer(uint8_t data);
+
+	static modm::ResumableResult<void>
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
+
+	static void 
+	basicTransfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
 	static constexpr SpiTransferTask createTask(){
 		return [](const SpiTransferStep& step){
@@ -144,7 +150,7 @@ private:
 					// }
 
 					/// just do the transfer
-					transfer(step.tx, step.rx, length);
+					basicTransfer(step.tx, step.rx, length);
 				}
 			}
 			return work;
