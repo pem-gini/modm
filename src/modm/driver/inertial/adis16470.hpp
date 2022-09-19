@@ -21,6 +21,7 @@
 #include <modm/architecture/interface/gpio.hpp>
 #include <modm/processing/resumable.hpp>
 #include <modm/processing/timer/timeout.hpp>
+#include <modm/architecture/interface/spi.hpp>
 
 namespace modm
 {

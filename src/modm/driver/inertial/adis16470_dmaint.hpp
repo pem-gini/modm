@@ -17,16 +17,21 @@
 #include <optional>
 #include <span>
 #include <functional>
+#include <modm/architecture/interface/spi_device.hpp>
 #include <modm/architecture/interface/register.hpp>
 #include <modm/architecture/interface/gpio.hpp>
 #include <modm/processing/timer/timeout.hpp>
+#include <modm/processing/resumable.hpp>
 #include <modm/platform/exti/exti.hpp>
+#include <modm/architecture/interface/peripheral.hpp>
+#include <modm/architecture/interface/spi.hpp>
+#include <modm/math/units.hpp>
 
 namespace modm
 {
 
 /// @ingroup modm_driver_adis16470
-struct adis16470
+struct adis16470DmaInt
 {
 	/// Available registers
 	enum class
@@ -179,17 +184,34 @@ struct adis16470
 	MODM_FLAGS16(GlobCmd);
 };
 
+
 /**
  * \ingroup	modm_driver_adis16470
  * \author	Raphael Lehmann, Nick Fiege
  */
-template<class SpiQueuedDma, class Cs, class Int>
-class Adis16470DmaInt : public adis16470,
-				  public modm::SpiDevice<SpiQueuedDma>,
-				  protected modm::NestedResumable<2>
+template<class SpiQueuedDma, class Cs>
+class Adis16470DmaInt : public adis16470DmaInt, protected modm::NestedResumable<2>, public modm::SpiDevice<SpiQueuedDma>
 {
+private:
+	inline static modm::SpiTransferConfiguration configuration = modm::SpiTransferConfiguration{
+		.pre = [](){
+			SpiQueuedDma::setDataMode(SpiQueuedDma::DataMode::Mode3);
+			SpiQueuedDma::setDataOrder(SpiQueuedDma::DataOrder::MsbFirst);
+		},
+		.post = [](){
+		}
+	};
+
 public:
+	using RegisterBurstBuffer = std::array<uint16_t, 11>;
+	struct RegisterBurstData{
+		bool valid = false;
+		const RegisterBurstBuffer buffer;
+	};
+	using BurstData = std::function<void()>;
 	using AdisInterruptCallback = std::function<void()>;
+	using RegisterBurstFinishedCallback = std::function<void(const RegisterBurstData&)>;
+
 	/**
 	 * @brief Initialize
 	 *
@@ -217,7 +239,7 @@ public:
 	 *
 	 * @return The register value
 	 */
-	modm::ResumableResult<modm::adis16470::DiagStat_t>
+	modm::ResumableResult<modm::adis16470DmaInt::DiagStat_t>
 	readDiagStat();
 
 	/**
@@ -225,7 +247,7 @@ public:
 	 *
 	 * @return The register value
 	 */
-	modm::ResumableResult<modm::adis16470::MscCtrl_t>
+	modm::ResumableResult<modm::adis16470DmaInt::MscCtrl_t>
 	readMscCtrl();
 
 	/**
@@ -245,7 +267,7 @@ public:
 	 * @param value The value to be written to the MSC_CTRL register.
 	 */
 	modm::ResumableResult<void>
-	writeMscCtrl(modm::adis16470::MscCtrl_t value);
+	writeMscCtrl(modm::adis16470DmaInt::MscCtrl_t value);
 
 	/**
 	 * @brief Write the MSC_CTRL register
@@ -253,7 +275,7 @@ public:
 	 * @param value The value to be written to the MSC_CTRL register.
 	 */
 	modm::ResumableResult<void>
-	writeGlobCmd(modm::adis16470::GlobCmd_t value);
+	writeGlobCmd(modm::adis16470DmaInt::GlobCmd_t value);
 
 	/**
 	 * @brief Set the desired data output frequency from 1Hz to 2kHz
@@ -306,11 +328,23 @@ public:
 	modm::ResumableResult<bool>
 	readRegisterBurst(std::array<uint16_t, 11>& data);
 
+	template<typename Int>
 	void
-	Adis16470DmaInt<SpiQueuedDma, Cs, Int>::registerInterruptCallback(auto cb);
+	registerInterruptCallback(auto&& cb);
 
 	void
-	Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegisterBurstIntoBuffer();
+	readRegisterBurstIntoBuffer();
+
+	const RegisterBurstData&
+	getRegisterBurstData() const {
+		return burstData;
+	}
+
+	void
+	registerBurstFinishedCallback(auto cb) {
+		registerBurstFinished = cb;
+	}
+
 
 private:
 	static constexpr std::size_t bufferSize = 22;
@@ -323,8 +357,8 @@ private:
 	modm::ShortPreciseTimeout timeout{tStall};
 
 	AdisInterruptCallback intCallback = nullptr;
-	std::array<uint16_t, 11> burstDataBuffer;
-	bool burstDataValid = false;
+	RegisterBurstFinishedCallback registerBurstFinished = nullptr;
+	RegisterBurstData burstData;
 };
 
 

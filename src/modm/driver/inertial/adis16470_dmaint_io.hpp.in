@@ -10,8 +10,8 @@
  */
 // ----------------------------------------------------------------------------
 
-#ifndef MODM_ADIS16470_IO_HPP
-#define MODM_ADIS16470_IO_HPP
+#ifndef MODM_ADIS16470_DMAINT_IO_HPP
+#define MODM_ADIS16470_DMAINT_IO_HPP
 
 #include "adis16470_dmaint.hpp"
 
@@ -25,14 +25,14 @@ namespace modm
 // Output operators
 /// @ingroup modm_driver_adis16470
 IOStream&
-operator << (IOStream& os, const adis16470::DiagStat_t& c);
+operator << (IOStream& os, const adis16470DmaInt::DiagStat_t& c);
 
 /// @ingroup modm_driver_adis16470
 IOStream&
-operator << (IOStream& os, const adis16470::MscCtrl_t& c);
+operator << (IOStream& os, const adis16470DmaInt::MscCtrl_t& c);
 
 }
 
 %% endif
 
-#endif // MODM_ADIS16470_IO_HPP
+#endif // MODM_ADIS16470_DMAINT_IO_HPP

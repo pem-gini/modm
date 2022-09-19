@@ -19,20 +19,23 @@
 namespace modm
 {
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<void>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::initialize()
+Adis16470DmaInt<SpiQueuedDma, Cs>::initialize()
 {
 	RF_BEGIN();
+	this->attachConfigurationHandler([]() {
+		configuration.pre.call_if();
+	});
 	Cs::setOutput(modm::Gpio::High);
 	timeout.restart(tStall);
 	RF_END();
 }
 
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<std::optional<uint16_t>>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegister(Register reg)
+Adis16470DmaInt<SpiQueuedDma, Cs>::readRegister(Register reg)
 {
 	RF_BEGIN();
 
@@ -69,27 +72,27 @@ Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegister(Register reg)
 	RF_END_RETURN((static_cast<uint16_t>(buffer[2]) << 8) | buffer[3]);
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
-modm::ResumableResult<modm::adis16470::DiagStat_t>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readDiagStat()
+template<class SpiQueuedDma, class Cs>
+modm::ResumableResult<modm::adis16470DmaInt::DiagStat_t>
+Adis16470DmaInt<SpiQueuedDma, Cs>::readDiagStat()
 {
 	RF_BEGIN();
 	tmp = RF_CALL(readRegister(Register::DIAG_STAT));
 	RF_END_RETURN(DiagStat_t(*tmp));
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
-modm::ResumableResult<modm::adis16470::MscCtrl_t>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readMscCtrl()
+template<class SpiQueuedDma, class Cs>
+modm::ResumableResult<modm::adis16470DmaInt::MscCtrl_t>
+Adis16470DmaInt<SpiQueuedDma, Cs>::readMscCtrl()
 {
 	RF_BEGIN();
 	tmp = RF_CALL(readRegister(Register::MSC_CTRL));
 	RF_END_RETURN(MscCtrl_t(*tmp));
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<bool>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::writeRegister(Register reg, uint16_t value)
+Adis16470DmaInt<SpiQueuedDma, Cs>::writeRegister(Register reg, uint16_t value)
 {
 	RF_BEGIN();
 
@@ -128,9 +131,9 @@ Adis16470DmaInt<SpiQueuedDma, Cs, Int>::writeRegister(Register reg, uint16_t val
 	RF_END_RETURN(true);
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<void>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::writeMscCtrl(modm::adis16470::MscCtrl_t value)
+Adis16470DmaInt<SpiQueuedDma, Cs>::writeMscCtrl(modm::adis16470DmaInt::MscCtrl_t value)
 {
 	RF_BEGIN();
 
@@ -142,19 +145,19 @@ Adis16470DmaInt<SpiQueuedDma, Cs, Int>::writeMscCtrl(modm::adis16470::MscCtrl_t 
 	RF_END();
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<void>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::writeGlobCmd(modm::adis16470::GlobCmd_t value)
+Adis16470DmaInt<SpiQueuedDma, Cs>::writeGlobCmd(modm::adis16470DmaInt::GlobCmd_t value)
 {
 	RF_BEGIN();
 	RF_CALL(writeRegister(Register::GLOB_CMD, value.value));
 	RF_END();
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 template<frequency_t frequency, percent_t tolerance>
 modm::ResumableResult<void>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::setDataOutputFrequency()
+Adis16470DmaInt<SpiQueuedDma, Cs>::setDataOutputFrequency()
 {
 	// Output data rate R = 2000SPS / (DEC_RATE + 1)
 	constexpr uint16_t decRate = ((2000 / frequency) - 1) & 0b111'1111'1111;
@@ -168,9 +171,10 @@ Adis16470DmaInt<SpiQueuedDma, Cs, Int>::setDataOutputFrequency()
 	RF_END();
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<bool>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegisterSequence(std::span<const Register> sequence, std::span<uint16_t> values)
+Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterSequence(std::span<const Register> sequence, std::span<uint16_t> values)
 {
 	RF_BEGIN();
 
@@ -228,9 +232,9 @@ Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegisterSequence(std::span<const Reg
 	RF_END_RETURN(true);
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
 modm::ResumableResult<bool>
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegisterBurst(std::array<uint16_t, 11>& data)
+Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurst(std::array<uint16_t, 11>& data)
 {
 	RF_BEGIN();
 
@@ -261,42 +265,47 @@ Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegisterBurst(std::array<uint16_t, 1
 	RF_END_RETURN(checksum == data[10]);
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+template<class SpiQueuedDma, class Cs>
+template<typename Int>
 void
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::registerInterruptCallback(auto cb)
+Adis16470DmaInt<SpiQueuedDma, Cs>::registerInterruptCallback(auto&& cb)
 {
 	intCallback = cb;
 	modm::platform::Exti::enableInterrupts<Int>();
-	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::RisingEdge, [&](uint8_t /*line*/) mutable {
-		__disable_irq();  // disable all interrupts
-		if(intCallback != nullptr){
+	modm::platform::Exti::connect<Int>(modm::platform::Exti::Trigger::RisingEdge, [&](uint8_t /*line*/) mutable {
+		if(intCallback){
+			__disable_irq();  // disable all interrupts
 			intCallback();
+			__enable_irq();   // enable all interrupts
 		}
-		__enable_irq();   // enable all interrupts
 	});
 }
 
-template<class SpiQueuedDma, class Cs, class Int>
+
+template<class SpiQueuedDma, class Cs>
 void 
-Adis16470DmaInt<SpiQueuedDma, Cs, Int>::readRegisterBurstIntoBuffer()
+Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurstIntoBuffer()
 {
 	auto post = [&](){
 		// Calulate checksum
 		checksum = 0;
 		for (i = 0; i < 18; i++) {
-			checksum += reinterpret_cast<uint8_t*>(burstDataBuffer.data() + 1)[i];
+			checksum += reinterpret_cast<uint8_t*>(burstData.buffer.data() + 1)[i];
 		}
 		// Fix endianness
 		for (i = 1; i < 11; i++) {
-			burstDataBuffer[i] = modm::fromBigEndian(burstDataBuffer[i]);
+			burstData.buffer[i] = modm::fromBigEndian(burstData.buffer[i]);
 		}
-		burstDataValid = checksum == burstDataBuffer[10];
+		burstData.valid = checksum == burstData.buffer[10];
+		if(registerBurstFinished){
+			registerBurstFinished(getRegisterBurstData());
+		}
 	};
 
 	buffer.fill(0);
 	buffer[0] = 0x68;
 	SpiQueuedDma::pipeline(
-		SpiTransferStep{buffer, reinterpret_cast<uint8_t*>(burstDataBuffer.data()), bufferSize, post, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		modm::SpiTransferStep{buffer, reinterpret_cast<uint8_t*>(burstData.buffer.data()), sizeof(RegisterBurstBuffer), post, nullptr, configuration, CsBehavior<Cs>(ChipSelect::TOGGLE)}
 	);
 }
 

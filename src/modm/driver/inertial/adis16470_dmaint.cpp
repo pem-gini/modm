@@ -13,58 +13,58 @@
 #include "adis16470_dmaint.hpp"
 
 modm::IOStream&
-modm::operator << (modm::IOStream& os, const adis16470::DiagStat_t& c) {
+modm::operator << (modm::IOStream& os, const adis16470DmaInt::DiagStat_t& c) {
 	os << "DiagStat(";
-	if(c & adis16470::DiagStat::ClockError)
+	if(c & adis16470DmaInt::DiagStat::ClockError)
 		os << "ClockError ";
-	if(c & adis16470::DiagStat::MemoryFailure)
+	if(c & adis16470DmaInt::DiagStat::MemoryFailure)
 		os << "MemoryFailure ";
-	if(c & adis16470::DiagStat::SensorFailure)
+	if(c & adis16470DmaInt::DiagStat::SensorFailure)
 		os << "SensorFailure ";
-	if(c & adis16470::DiagStat::StandbyMode)
+	if(c & adis16470DmaInt::DiagStat::StandbyMode)
 		os << "StandbyMode ";
-	if(c & adis16470::DiagStat::SpiCommunicationError)
+	if(c & adis16470DmaInt::DiagStat::SpiCommunicationError)
 		os << "SpiCommunicationError ";
-	if(c & adis16470::DiagStat::FlashUpdateFailure)
+	if(c & adis16470DmaInt::DiagStat::FlashUpdateFailure)
 		os << "FlashUpdateFailure ";
-	if(c & adis16470::DiagStat::DataPathOverrun)
+	if(c & adis16470DmaInt::DiagStat::DataPathOverrun)
 		os << "DataPathOverrun ";
 	os << ")";
 	return os;
 }
 
 modm::IOStream&
-modm::operator << (modm::IOStream& os, const adis16470::MscCtrl_t& c) {
+modm::operator << (modm::IOStream& os, const adis16470DmaInt::MscCtrl_t& c) {
 	os << "MscCtrl(";
-	if(c & adis16470::MscCtrl::LinearGCompensationGyro)
+	if(c & adis16470DmaInt::MscCtrl::LinearGCompensationGyro)
 		os << "LinearGCompensationGyro ";
-	if(c & adis16470::MscCtrl::PointOfPercussionAlign)
+	if(c & adis16470DmaInt::MscCtrl::PointOfPercussionAlign)
 		os << "PointOfPercussionAlign ";
 	os << "SyncFunction=";
-	switch (adis16470::SyncFunction_t::get(c))
+	switch (adis16470DmaInt::SyncFunction_t::get(c))
 	{
-	case adis16470::SyncFunction::PulseSync:
+	case adis16470DmaInt::SyncFunction::PulseSync:
 		os << "PulseSync ";
 		break;
-	case adis16470::SyncFunction::OutputSync:
+	case adis16470DmaInt::SyncFunction::OutputSync:
 		os << "OutputSync ";
 		break;
-	case adis16470::SyncFunction::ScaledSync:
+	case adis16470DmaInt::SyncFunction::ScaledSync:
 		os << "ScaledSync ";
 		break;
-	case adis16470::SyncFunction::DirectSync:
+	case adis16470DmaInt::SyncFunction::DirectSync:
 		os << "DirectSync ";
 		break;
-	case adis16470::SyncFunction::InternalClock:
+	case adis16470DmaInt::SyncFunction::InternalClock:
 		os << "InternalClock ";
 		break;
 	default:
 		os << "? ";
 		break;
 	}
-	if(c & adis16470::MscCtrl::SyncPolarity)
+	if(c & adis16470DmaInt::MscCtrl::SyncPolarity)
 		os << "SyncPolarity ";
-	if(c & adis16470::MscCtrl::DrPolarity)
+	if(c & adis16470DmaInt::MscCtrl::DrPolarity)
 		os << "DrPolarity ";
 	os << ")";
 	return os;
