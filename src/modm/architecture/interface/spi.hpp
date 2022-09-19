@@ -21,8 +21,6 @@
 #include <etl/delegate.h>
 #include <functional>
 
-#include <modm/debug.hpp>
-
 namespace modm
 {
 
@@ -64,7 +62,7 @@ using SpiTransferConditional = std::function<bool()>;
 using SpiTransferLength = std::function<std::size_t()>;
 using SpiTransferCs = std::function<void()>;
 
-enum class ChipSelectBehavior{
+enum class ChipSelect{
 	NONE,
 	RESET,
 	SET,
@@ -74,7 +72,7 @@ enum class ChipSelectBehavior{
 template <typename GPIO>
 struct ChipSelectBehaviorWrapper{
 	using CS = GPIO;
-	ChipSelectBehavior behavior;
+	ChipSelect behavior;
 };
 class SpiTransferChipSelectBehavior{
 public:
@@ -82,9 +80,9 @@ public:
 		pre{[wrapper](){
 			if constexpr (!std::is_void<typename decltype(wrapper)::CS>::value){
 				switch(wrapper.behavior){
-					case ChipSelectBehavior::NONE: break;
-					case ChipSelectBehavior::RESET: decltype(wrapper)::CS::reset(); break;
-					case ChipSelectBehavior::TOGGLE: decltype(wrapper)::CS::reset(); break;
+					case ChipSelect::NONE: break;
+					case ChipSelect::RESET: decltype(wrapper)::CS::reset(); break;
+					case ChipSelect::TOGGLE: decltype(wrapper)::CS::reset(); break;
 					default: break;
 				};
 			}
@@ -92,9 +90,9 @@ public:
 		post{[wrapper](){
 			if constexpr (!std::is_void<typename decltype(wrapper)::CS>::value){
 				switch(wrapper.behavior){
-					case ChipSelectBehavior::NONE: break;
-					case ChipSelectBehavior::SET: decltype(wrapper)::CS::set(); break;
-					case ChipSelectBehavior::TOGGLE: decltype(wrapper)::CS::set(); break;
+					case ChipSelect::NONE: break;
+					case ChipSelect::SET: decltype(wrapper)::CS::set(); break;
+					case ChipSelect::TOGGLE: decltype(wrapper)::CS::set(); break;
 					default: break;
 				};
 			}
@@ -105,7 +103,7 @@ public:
 };
 
 template<typename CS = void>
-static constexpr SpiTransferChipSelectBehavior CsBehavior(ChipSelectBehavior behavior = ChipSelectBehavior::NONE){
+static constexpr SpiTransferChipSelectBehavior CsBehavior(ChipSelect behavior = ChipSelect::NONE){
 	ChipSelectBehaviorWrapper<CS> wrapper{behavior};
 	SpiTransferChipSelectBehavior cs = SpiTransferChipSelectBehavior(wrapper);
 	return cs;
@@ -114,7 +112,7 @@ static constexpr SpiTransferChipSelectBehavior CsBehavior(ChipSelectBehavior beh
 class SpiTransferStep{
 public:
 	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_,
-					auto configuration_, SpiTransferChipSelectBehavior csbehavior = CsBehavior<void>())
+					auto configuration_, SpiTransferChipSelectBehavior csbehavior)
 		: tx{tx_},
 		  rx{rx_},
 		  cb{cb_},

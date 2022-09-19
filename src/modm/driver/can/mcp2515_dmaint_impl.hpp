@@ -295,9 +295,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	tx_buf[0] = RX_STATUS;
 	tx_buf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration},
-		SpiTransferStep{tx_buf, rx_buf, 6, readCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelectBehavior::RESET)},
-		SpiTransferStep{tx_buf, rx_buf, [&](){return messageBuffer.length;}, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelectBehavior::SET)}
+		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{tx_buf, rx_buf, 6, readCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::RESET)},
+		SpiTransferStep{tx_buf, rx_buf, [&](){return messageBuffer.length;}, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::SET)}
 	);
 }
 
@@ -376,9 +376,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 	tx_buf[0] = READ_STATUS;
 	tx_buf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, statusPost, nullptr, configuration},
-		SpiTransferStep{tx_buf, rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration},
-		SpiTransferStep{tx_buf, rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration} // skip if no free tx buffer
+		SpiTransferStep{tx_buf, rx_buf, 2, statusPost, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{tx_buf, rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{tx_buf, rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)} // skip if no free tx buffer
 	);
 }
 // ----------------------------------------------------------------------------
