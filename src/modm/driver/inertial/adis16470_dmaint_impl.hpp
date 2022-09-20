@@ -14,8 +14,6 @@
 	#error	"Don't include this file directly, use 'adis16470.hpp' instead!"
 #endif
 
-#include <modm/math/utils.hpp>
-
 namespace modm
 {
 

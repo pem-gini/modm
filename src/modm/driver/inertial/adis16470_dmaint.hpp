@@ -25,7 +25,7 @@
 #include <modm/platform/exti/exti.hpp>
 #include <modm/architecture/interface/peripheral.hpp>
 #include <modm/architecture/interface/spi.hpp>
-#include <modm/math/units.hpp>
+#include <modm/math.hpp>
 
 namespace modm
 {
@@ -184,6 +184,11 @@ struct adis16470DmaInt
 	MODM_FLAGS16(GlobCmd);
 };
 
+using RegisterBurstBuffer = std::array<uint16_t, 11>;
+struct RegisterBurstData{
+	bool valid = false;
+	RegisterBurstBuffer buffer;
+};
 
 /**
  * \ingroup	modm_driver_adis16470
@@ -203,14 +208,12 @@ private:
 	};
 
 public:
-	using RegisterBurstBuffer = std::array<uint16_t, 11>;
-	struct RegisterBurstData{
-		bool valid = false;
-		const RegisterBurstBuffer buffer;
-	};
 	using BurstData = std::function<void()>;
 	using AdisInterruptCallback = std::function<void()>;
 	using RegisterBurstFinishedCallback = std::function<void(const RegisterBurstData&)>;
+
+	Adis16470DmaInt() : intCallback{nullptr}, registerBurstFinished{nullptr} 
+	{}
 
 	/**
 	 * @brief Initialize
@@ -356,11 +359,10 @@ private:
 	const modm::ShortPreciseDuration tStall{std::chrono::microseconds(16)};
 	modm::ShortPreciseTimeout timeout{tStall};
 
-	AdisInterruptCallback intCallback = nullptr;
-	RegisterBurstFinishedCallback registerBurstFinished = nullptr;
+	AdisInterruptCallback intCallback;
+	RegisterBurstFinishedCallback registerBurstFinished;
 	RegisterBurstData burstData;
 };
-
 
 
 } // modm namespace
