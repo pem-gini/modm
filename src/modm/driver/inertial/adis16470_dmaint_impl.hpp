@@ -296,7 +296,7 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurstIntoBuffer()
 		}
 		burstData.valid = checksum == burstData.buffer[10];
 		if(registerBurstFinished){
-			registerBurstFinished(getRegisterBurstData());
+			registerBurstFinished(getRegisterBurst());
 		}
 	};
 

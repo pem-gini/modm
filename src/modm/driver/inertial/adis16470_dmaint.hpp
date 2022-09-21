@@ -190,6 +190,46 @@ struct RegisterBurstData{
 	RegisterBurstBuffer buffer;
 };
 
+class RegisterBurst{
+private:
+	static constexpr float g = 9.81;
+	static constexpr float g_factor = 1.25 * g / 1000.0; /// 1bit value ~ 1.25 milli g (1/1000 of g)
+    static constexpr float convertAcc(int16_t val) {
+        return val * g_factor;
+    }
+    static constexpr float convertGyro(int16_t val) {
+        float value = static_cast<float>(val / 10.0);
+        return value;
+    }
+	static constexpr float convertTemperature(int16_t val){
+		return val * 0.1; /// Temperature data; twos complement, 1 LSB = 0.1°C, 0°C = 0x0000
+	}
+public:
+	RegisterBurst(const RegisterBurstData& data) 
+	: valid{data.valid},
+	  diag_stat{data.buffer[1]},
+	  gyrox{convertGyro(data.buffer[2])},
+	  gyroy{convertGyro(data.buffer[3])},
+	  gyroz{convertGyro(data.buffer[4])},
+	  accelx{convertAcc(data.buffer[5])},
+	  accely{convertAcc(data.buffer[6])},
+	  accelz{convertAcc(data.buffer[7])},
+	  temperature{convertTemperature(data.buffer[8])},
+	  counter{data.buffer[9]}
+	  {}
+	bool valid;
+	adis16470DmaInt::DiagStat diag_stat;
+	float gyrox;
+	float gyroy;
+	float gyroz;
+	float accelx;
+	float accely;
+	float accelz;
+	float temperature;
+	uint16_t counter;
+	// float checksum; /// skip checksum
+};
+
 /**
  * \ingroup	modm_driver_adis16470
  * \author	Raphael Lehmann, Nick Fiege
@@ -210,7 +250,7 @@ private:
 public:
 	using BurstData = std::function<void()>;
 	using AdisInterruptCallback = std::function<void()>;
-	using RegisterBurstFinishedCallback = std::function<void(const RegisterBurstData&)>;
+	using RegisterBurstFinishedCallback = std::function<void(const RegisterBurst&)>;
 
 	Adis16470DmaInt() : intCallback{nullptr}, registerBurstFinished{nullptr} 
 	{}
@@ -338,10 +378,8 @@ public:
 	void
 	readRegisterBurstIntoBuffer();
 
-	const RegisterBurstData&
-	getRegisterBurstData() const {
-		return burstData;
-	}
+	inline RegisterBurst
+	getRegisterBurst() const {return RegisterBurst{burstData};}
 
 	void
 	registerBurstFinishedCallback(auto cb) {
