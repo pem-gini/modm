@@ -302,8 +302,8 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurstIntoBuffer()
 
 	buffer.fill(0);
 	buffer[0] = 0x68;
-	SpiQueuedDma::pipeline(
-		modm::SpiTransferStep{buffer, reinterpret_cast<uint8_t*>(burstData.buffer.data()), sizeof(RegisterBurstBuffer), post, nullptr, configuration, CsBehavior<Cs>(ChipSelect::TOGGLE)}
+	spi.pipeline(
+		modm::SpiTransferStep{&buffer[0], reinterpret_cast<uint8_t*>(burstData.buffer.data()), sizeof(RegisterBurstBuffer), post, nullptr, configuration, modm::CsBehavior<Cs>(ChipSelect::TOGGLE)}
 	);
 }
 

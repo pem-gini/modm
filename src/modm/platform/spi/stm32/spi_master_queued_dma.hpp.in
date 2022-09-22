@@ -216,6 +216,7 @@ private:
 	{
 		/// exec the current task from queue if nothing else is going on
 		if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
+			queueTask = true;
 			const auto& entry = queue.front();
 			/// exec task now
 			bool didADmaThing = entry.task(entry.step);
@@ -245,6 +246,7 @@ private:
 	static inline SpiTransferTaskQueue queue;
 	static inline SpiDataQueue buffers;
 	static inline size_t nextBuffer = 0;
+	static inline bool queueTask = false;
 };
 
 } // namespace platform

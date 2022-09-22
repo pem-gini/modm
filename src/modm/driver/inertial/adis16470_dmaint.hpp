@@ -400,6 +400,8 @@ private:
 	AdisInterruptCallback intCallback;
 	RegisterBurstFinishedCallback registerBurstFinished;
 	RegisterBurstData burstData;
+
+	static SpiQueuedDma spi;
 };
 
 

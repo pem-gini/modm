@@ -151,8 +151,9 @@ template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::end(bool skipPost)
 {
-	/// we finished a task thingy
-	if(dmaTransmitComplete && dmaReceiveComplete){
+	/// we the last dma transfer was a queue thingy and if we have finished a task thingy
+	if(queueTask && dmaTransmitComplete && dmaReceiveComplete){
+		queueTask = false;
 		const auto& entry = queue.front();
 		/// do we want to skip its post stuff?
 		if(!skipPost){
@@ -280,7 +281,6 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		/// as we would never call exec again if this function has interrupted the "normal" queue flow
 		exec();
 		/// this function will return shortly after the next dma transfer was started and while the dma transfer is going on)
-		
 		return {modm::rf::Stop};
 	}
 }
