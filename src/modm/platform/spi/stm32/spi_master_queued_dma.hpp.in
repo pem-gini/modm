@@ -67,16 +67,30 @@ public:
 	static void
 	initialize();
 
+	/**kikass13:
+	* this function has no safety checks in place, when calling this, 
+	* make sure that there is nothing else runnign on the spi bus going on 
+	* and that the dma queue is not yet running
+	*/
 	static uint8_t
 	transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration, 
 		modm::SpiTransferChipSelectBehavior&& csbehavior = modm::CsBehavior<void>());
 
+	/**kikass13:
+	* this function has no safety checks in place, when calling this, 
+	* make sure that there is nothing else runnign on the spi bus going on 
+	* and that the dma queue is not yet running
+	*/
 	static void
 	transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
 		modm::SpiTransferConfiguration& configuration, 
 		modm::SpiTransferChipSelectBehavior&& csbehavior = modm::CsBehavior<void>());
 
-
+	/** kikass13:
+	* Create a new dma pipeline which will be pushed ontothe task queue of this controller
+	* This function will return instantly, the given task will be performed later when the queue 
+	* gets automatically emptied
+	/*/
 	template <typename... Steps>
 	static constexpr void pipeline(SpiTransferStep&& step, Steps... rest){
 		transferBegin(std::move(step));
@@ -86,6 +100,28 @@ public:
 		/// queue prepared, exec queue
 		exec();
 	};
+
+	/** kikass13:
+	* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
+	* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty
+	* this is a limitation of the the queue triggering itself after dma is finished, as there is no feasible way to let
+	* other functions intervene - as this would lead to further problems with the dma queue down the road (overflow)
+	* so these kind of calls (with this specific queued dma spi driver) will potentially have to wait a long time (infinitly) 
+	* until they are able to get their job done
+	*/
+	static modm::ResumableResult<uint8_t>
+	transfer(uint8_t data);
+
+	/** kikass13:
+	* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
+	* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty
+	* this is a limitation of the the queue triggering itself after dma is finished, as there is no feasible way to let
+	* other functions intervene - as this would lead to further problems with the dma queue down the road (overflow)
+	* so these kind of calls (with this specific queued dma spi driver) will potentially have to wait a long time (infinitly) 
+	* until they are able to get their job done
+	*/
+	static modm::ResumableResult<void>
+	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
 private:
 	static constexpr void transferBegin(SpiTransferStep&& step){
@@ -113,8 +149,12 @@ private:
 
 	static uint8_t transferBlockingSingleByte(uint8_t b);
 
+	/** kikass13:
+	* Basic spi transfer via dma will start a dma transfer with the given tx, rx length parameters
+	* This function is used directly by the dma queue as well as indiretly by the resumable transfer function
+	*/
 	static void 
-	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
+	basicTransfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
 	static constexpr SpiTransferTask createTask(){
 		return [](const SpiTransferStep& step){
@@ -142,9 +182,8 @@ private:
 					// }else{
 					// 	transfer(step.tx, step.rx, length);
 					// }
-
-					/// just do the transfer
-					transfer(step.tx, step.rx, length);
+					/// just do the transfer, even with length = 1
+					basicTransfer(step.tx, step.rx, length);
 				}
 			}
 			return work;
@@ -159,6 +198,9 @@ private:
 	handleDmaTransmitComplete();
 
 
+	/** kikass13:
+	* Push a given Task + meta information onto the dma queue for later execution
+	*/
 	static constexpr void push(SpiTansferEntry&& entry)
 	{
 		/// push entry onto queue if not full
@@ -167,10 +209,14 @@ private:
 		}
 	}
 
+	/** kikass13:
+	* execute the next task on the dma queue when we have nothing else currently going on
+	*/
 	static constexpr void exec()
 	{
 		/// exec the current task from queue if nothing else is going on
 		if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
+			queueTask = true;
 			const auto& entry = queue.front();
 			/// exec task now
 			bool didADmaThing = entry.task(entry.step);
@@ -182,6 +228,10 @@ private:
 		}
 	}
 
+	/** kikass13:
+	* do end routine after a task is finished (dma transfer complete) and call exec, 
+	* to potentially trigger the next dma from the queue
+	*/
 	static void end(bool skipPost = false);
 
 private:
@@ -196,6 +246,7 @@ private:
 	static inline SpiTransferTaskQueue queue;
 	static inline SpiDataQueue buffers;
 	static inline size_t nextBuffer = 0;
+	static inline bool queueTask = false;
 };
 
 } // namespace platform

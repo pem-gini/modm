@@ -4,6 +4,7 @@
  * Copyright (c) 2010, Thorsten Lajewski
  * Copyright (c) 2012-2015, 2017-2018, Niklas Hauser
  * Copyright (c) 2014, 2017, Sascha Schade
+ * Copyright (c) 2023, Nick Fiege
  *
  * This file is part of the modm project.
  *
@@ -98,9 +99,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 	modm::platform::Exti::enableInterrupts<INT>();
 	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
 		using namespace mcp2515;
-		modm::platform::Exti::disableInterrupts<INT>();
+		__disable_irq();  // disable all interrupts
 		mcp2515ReadMessage();
-		modm::platform::Exti::enableInterrupts<INT>();
+		__enable_irq();   // enable all interrupts
 	});
 
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;

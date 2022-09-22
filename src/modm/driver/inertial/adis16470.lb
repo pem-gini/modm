@@ -39,3 +39,9 @@ def build(env):
     env.copy("adis16470_impl.hpp")
     if env.has_module("modm:io"):
         env.copy("adis16470.cpp")
+
+    env.copy("adis16470_dmaint.hpp")
+    env.template("adis16470_dmaint_io.hpp.in")
+    env.copy("adis16470_dmaint_impl.hpp")
+    if env.has_module("modm:io"):
+        env.copy("adis16470_dmaint.cpp")
