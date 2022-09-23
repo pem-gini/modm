@@ -183,12 +183,4 @@ modm::platform::SpiMaster{{ id }}_Dma<DmaChannelRx, DmaChannelTx>::handleDmaTran
 {
 	Dma::TxChannel::stop();
 	dmaTransmitComplete = true;
-	/// call user cb for transmit complete notification
-	if(lastCb.is_valid()){
-		lastCb(lastTx, lastRx, lastLength);
-		lastCb = SpiMaster{{ id }}::SpiTransferCallback{};
-		lastTx = nullptr;
-		lastRx = nullptr;
-		lastLength = 0;
-	}
 }

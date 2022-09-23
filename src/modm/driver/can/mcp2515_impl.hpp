@@ -4,7 +4,6 @@
  * Copyright (c) 2010, Thorsten Lajewski
  * Copyright (c) 2012-2015, 2017-2018, Niklas Hauser
  * Copyright (c) 2014, 2017, Sascha Schade
- * Copyright (c) 2023, Nick Fiege
  *
  * This file is part of the modm project.
  *
@@ -97,6 +96,7 @@ bool
 modm::Mcp2515<SPI, CS, INT>::initialize()
 {
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
+
 	return initializeWithPrescaler(Timings::getPrescaler(), Timings::getSJW(), Timings::getProp(),
 								   Timings::getPS1(), Timings::getPS2());
 }

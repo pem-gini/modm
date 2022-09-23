@@ -88,11 +88,6 @@ private:
 
 	// needed for transfers where no RX or TX buffers are given
 	static inline uint8_t dmaDummy { 0 };
-
-	static inline SpiMaster{{ id }}::SpiTransferCallback lastCb;
-	static inline uint8_t* lastTx = nullptr;
-	static inline uint8_t* lastRx = nullptr;
-	static inline size_t lastLength = 0;
 };
 
 } // namespace platform
