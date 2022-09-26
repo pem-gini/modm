@@ -15,6 +15,10 @@
 #ifndef	MODM_MCP2515_DEFINITIONS_HPP
 #define	MODM_MCP2515_DEFINITIONS_HPP
 
+//#include <cstdint>
+
+//using namespace std;
+
 namespace modm
 {
 	namespace mcp2515
@@ -418,6 +422,33 @@ namespace modm
 			MATCH_RXF1 = 1,
 			MATCH_RXF0 = 0,
 		};
+
+		typedef struct __attribute__ ((packed))  mcpMsgData{
+			unsigned SID:11;
+			unsigned SRR:1;
+			unsigned IDE:1;
+			unsigned reserved:1;
+			unsigned EID:18;
+			unsigned reserved2:1;
+			unsigned RTR:1;
+			unsigned RB:2;
+			unsigned DLC:4;
+			uint8_t data[8];
+		} mcpMsgData;
+
+		typedef struct __attribute__ ((packed)) mcpSpiDataStruct{
+			mcpMsgData msg1;
+			uint8_t CANSTAT;
+			//uint8_t CANCTRL;
+			//uint8_t RXB1CTRL;
+			//mcpMsgData msg2;
+		} mcpSpiDataStruct;
+
+		// typedef union mcpSpiData{
+		// 	mcpSpiDataStruct data;
+		// 	uint8_t raw[19];
+		// } mcpSpiData;
+
 	}
 }
 

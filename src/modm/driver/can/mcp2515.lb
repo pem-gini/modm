@@ -40,8 +40,8 @@ def prepare(module, options):
         NumericOption(
             name="spi.buffer",
             description="",
-            minimum=152, maximum=2 ** 16 - 2,
-            default=152))
+            minimum=64, maximum=2 ** 16 - 2,
+            default=64))
     module.depends(
         ":architecture:accessor",
         ":architecture:assert",

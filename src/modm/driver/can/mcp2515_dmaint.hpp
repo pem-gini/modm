@@ -234,6 +234,9 @@ private:
 
 	inline static uint8_t tx_buf[modm::mcp2515::options::SPI_BUFFER_SIZE];
 	inline static uint8_t rx_buf[modm::mcp2515::options::SPI_BUFFER_SIZE];
+	
+	inline static uint8_t spiReadDataLength = 0;
+
 };
 }  // namespace modm
 
