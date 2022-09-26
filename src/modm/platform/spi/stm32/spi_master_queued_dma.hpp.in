@@ -98,6 +98,10 @@ public:
 			((transferNext(s)), ...);
 		}, std::tie(rest...));
 		/// queue prepared, exec queue
+		if(queue.size() > 20){
+			MODM_LOG_INFO << "QQQQQQQQQQQQQQQQ: " << queue.size() << modm::endl;
+			modm::delay(100ms);
+		}
 		exec();
 	};
 

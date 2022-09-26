@@ -232,6 +232,7 @@ private:
 	inline static bool isReadyToSendFlag = false;
 	inline static bool receiveSuccess = false;
 
+	inline static uint8_t databuf[modm::mcp2515::options::SPI_BUFFER_SIZE];
 	inline static uint8_t tx_buf[modm::mcp2515::options::SPI_BUFFER_SIZE];
 	inline static uint8_t rx_buf[modm::mcp2515::options::SPI_BUFFER_SIZE];
 	

@@ -134,6 +134,7 @@ void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaReceiveComplete()
 {
 	Dma::RxChannel::stop();
+	GPIOA->ODR ^= 1 << 15; 
 	dmaReceiveComplete = true;
 	end();
 }
@@ -143,6 +144,7 @@ void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransmitComplete()
 {
 	Dma::TxChannel::stop();
+	GPIOA->ODR ^= 1 << 15; 
 	dmaTransmitComplete = true;
 	end();
 }

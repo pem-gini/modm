@@ -99,9 +99,14 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 	modm::platform::Exti::enableInterrupts<INT>();
 	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
 		using namespace mcp2515;
-		__disable_irq();  // disable all interrupts
+		uint32_t primask = __get_PRIMASK();
+	  __disable_irq();
+		// __disable_irq();  // disable all interrupts
 		mcp2515ReadMessage();
-		__enable_irq();   // enable all interrupts
+		// __enable_irq();   // enable all interrupts
+		if (!primask) {
+   		 __enable_irq();
+  		}
 	});
 
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
@@ -212,16 +217,14 @@ bool
 modm::Mcp2515DmaInt<SPI, CS, INT>::sendMessage(const can::Message &message)
 {
 	using namespace mcp2515;
-
-	// if (not modm_assert_continue_ignore(txQueue.push(message), "mcp2515.can.tx",
-	// 									"CAN transmit software buffer overflowed!", 1))
-	// {
-	// 	/// buffer full, could not send
-	// 	return false;
-	// }
-	modm::platform::Exti::disableInterrupts<INT>();
+	// __disable_irq();  // disable all interrupts
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
 	mcp2515SendMessage(message);
-	modm::platform::Exti::enableInterrupts<INT>();
+	// __enable_irq();   // enable all interrupts
+	if (!primask) {
+    	__enable_irq();
+  	}
 	return true;
 }
 
@@ -233,28 +236,46 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	using namespace mcp2515;
 
 
-	auto readData= [&]() {
-		mcpSpiDataStruct* mcpSpiDataPtr = reinterpret_cast<mcpSpiDataStruct*>(rx_buf);
+	auto readData = [&]() {
+		/// DELAY for ~50ns, to ensure that the chipselect has had time to properly reset the interrupt flag of the mcp
+		/// this is necessary, so that we can check the int pin later for a second consecutive read command, in case th int pin is still low
+		modm::delay(100ns);
+		/// ...
+		const uint32_t *ptr = &messageBuffer.identifier;
+		messageBuffer.flags.extended = false;
 
-		// we now have all data inside rx_buf
-		// first message
-		if (mcpSpiDataPtr->msg1.IDE){			
+		if (rx_buf[2] & MCP2515_IDE)
+		{
+			*((uint16_t*)ptr + 1) = (uint16_t)rx_buf[1] << 5;
+			*((uint8_t*)ptr + 1) = rx_buf[3];
+			*((uint8_t*)ptr + 2) |= (rx_buf[2] >> 3) & 0x1C;
+			*((uint8_t*)ptr + 2) |= rx_buf[2] & 0x03;
+			*((uint8_t*)ptr) = rx_buf[4];
 			messageBuffer.flags.extended = true;
-			messageBuffer.identifier = mcpSpiDataPtr->msg1.EID;
+		} else
+		{
+			*((uint8_t*)ptr + 3) = 0;
+			*((uint8_t*)ptr + 2) = 0;
+			*((uint16_t*)ptr) = (uint16_t)rx_buf[1] << 3;
+			*((uint8_t*)ptr) |= rx_buf[2] >> 5;
 		}
-		else{			
-			messageBuffer.flags.extended = false;
-			messageBuffer.identifier = mcpSpiDataPtr->msg1.SID;
+		if (statusBufferR & FLAG_RTR)
+		{
+			messageBuffer.flags.rtr = true;
+		} else
+		{
+			messageBuffer.flags.rtr = false;
 		}
-		messageBuffer.flags.rtr = mcpSpiDataPtr->msg1.RTR;
-		messageBuffer.length = mcpSpiDataPtr->msg1.DLC;
-		
+		messageBuffer.length = rx_buf[5] & 0x0f;
+
+		std::memcpy(messageBuffer.data, &rx_buf[6], messageBuffer.length);
 		if (not modm_assert_continue_ignore(rxQueue.push(messageBuffer), "mcp2515.can.tx",
 			"CAN transmit software buffer overflowed!", 1)){}
 
-		// prepare next status read
-		tx_buf[0] = RX_STATUS;
-		tx_buf[1] = 0xFF;
+		/// redo everything if mcp int is still active
+		if(!interruptPin.read()){
+			mcp2515ReadMessage();
+		}
 	};
 
 	auto processStatusAndPrepareRead = [&]() {
@@ -285,28 +306,28 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	};
 
 	auto processStatusAfterRead = [&]() {
-		statusBufferR = rx_buf[1];
-		readSuccessfulFlag = true;
+		// statusBufferR = rx_buf[1];
+		// readSuccessfulFlag = true;
 
-		if (statusBufferR & FLAG_RXB0_FULL)
-		{
-			addressBufferR = READ_RX ;  // message in buffer 0
-			spiReadDataLength = 1+13 + 1;
-		}
-		else if (statusBufferR & FLAG_RXB1_FULL)
-		{
-			addressBufferR = READ_RX | 0x04;  // message in buffer 1 (RXB1SIDH)
-			spiReadDataLength = 1+13 + 1;
-		}
-		 else
-		{
-			readSuccessfulFlag = false;  // Error: no message available
-			spiReadDataLength = 0;
-		}
+		// if (statusBufferR & FLAG_RXB0_FULL)
+		// {
+		// 	addressBufferR = READ_RX ;  // message in buffer 0
+		// 	spiReadDataLength = 1+13 + 1;
+		// }
+		// else if (statusBufferR & FLAG_RXB1_FULL)
+		// {
+		// 	addressBufferR = READ_RX | 0x04;  // message in buffer 1 (RXB1SIDH)
+		// 	spiReadDataLength = 1+13 + 1;
+		// }
+		//  else
+		// {
+		// 	readSuccessfulFlag = false;  // Error: no message available
+		// 	spiReadDataLength = 0;
+		// }
 
-		if (readSuccessfulFlag){
-			mcp2515ReadMessage();
-		}
+		// if (readSuccessfulFlag){
+		// 	mcp2515ReadMessage();
+		// }
 
 	};
 	////////////////////////////////////////////////////////////////////////////
@@ -322,12 +343,11 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	// 0x66 - 0x6D / 0x76 - 0x7D : RXBnDm: RECEIVE BUFFER n DATA BYTE m REGISTER
 
 
-	tx_buf[0] = RX_STATUS;
-	tx_buf[1] = 0xFF;
+	databuf[0] = RX_STATUS;
+	databuf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
-		SpiTransferStep{tx_buf, rx_buf, [&](){return spiReadDataLength;}, readData, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
-		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAfterRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)}
+		SpiTransferStep{databuf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{tx_buf, rx_buf, [&](){return spiReadDataLength;}, readData, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)}
 	);
 }
 
@@ -504,10 +524,10 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 	};
 
 	// go
-	tx_buf[0] = READ_STATUS;
-	tx_buf[1] = 0xFF;
+	databuf[0] = READ_STATUS;
+	databuf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, statusPost, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{databuf, rx_buf, 2, statusPost, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
 		SpiTransferStep{tx_buf, rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
 		SpiTransferStep{tx_buf, rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)} // skip if no free tx buffer
 	);
