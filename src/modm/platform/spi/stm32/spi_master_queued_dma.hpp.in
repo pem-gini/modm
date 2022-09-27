@@ -98,10 +98,6 @@ public:
 			((transferNext(s)), ...);
 		}, std::tie(rest...));
 		/// queue prepared, exec queue
-		if(queue.size() > 20){
-			MODM_LOG_INFO << "QQQQQQQQQQQQQQQQ: " << queue.size() << modm::endl;
-			modm::delay(100ms);
-		}
 		exec();
 	};
 
@@ -135,6 +131,7 @@ private:
 		}
 		uint8_t* buf = buffers.at(nextBuffer).data();
 		std::memcpy(buf, step.tx, length);
+		step.tx = buf;
 		// ---------------------------
 		auto task = createTask();
 		push({.task = task, .step = step });
@@ -219,7 +216,7 @@ private:
 	static constexpr void exec()
 	{
 		/// exec the current task from queue if nothing else is going on
-		if(!queue.empty() && (dmaTransmitComplete && dmaReceiveComplete)){
+		if(!queue.empty() && state == 0 && (dmaTransmitComplete && dmaReceiveComplete)){
 			queueTask = true;
 			const auto& entry = queue.front();
 			/// exec task now

@@ -99,14 +99,18 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 	modm::platform::Exti::enableInterrupts<INT>();
 	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
 		using namespace mcp2515;
-		uint32_t primask = __get_PRIMASK();
-	  __disable_irq();
+		/// kikass13:
+		/// for unknown reasons: 
+		/// do not disable/enable interrupts in here, because this leads to problems with the dma->spi pipeline for some reason
+		/// ill leave this here as a reminder, that this is intentional and that we dont interrupt the gpio interrupt, 
+		/// so that this readMessage (dma pipeline queue pushs) will be an atomic thing
+		// uint32_t primask = __get_PRIMASK();
 		// __disable_irq();  // disable all interrupts
 		mcp2515ReadMessage();
 		// __enable_irq();   // enable all interrupts
-		if (!primask) {
-   		 __enable_irq();
-  		}
+		// if (!primask) {
+   		//  __enable_irq();
+  		// }
 	});
 
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
@@ -218,13 +222,13 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::sendMessage(const can::Message &message)
 {
 	using namespace mcp2515;
 	// __disable_irq();  // disable all interrupts
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();
+	// uint32_t primask = __get_PRIMASK();
+	// __disable_irq();
 	mcp2515SendMessage(message);
 	// __enable_irq();   // enable all interrupts
-	if (!primask) {
-    	__enable_irq();
-  	}
+	// if (!primask) {
+    // 	__enable_irq();
+  	// }
 	return true;
 }
 
@@ -244,20 +248,20 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 		const uint32_t *ptr = &messageBuffer.identifier;
 		messageBuffer.flags.extended = false;
 
-		if (rx_buf[2] & MCP2515_IDE)
+		if (recv_rx_buf[2] & MCP2515_IDE)
 		{
-			*((uint16_t*)ptr + 1) = (uint16_t)rx_buf[1] << 5;
-			*((uint8_t*)ptr + 1) = rx_buf[3];
-			*((uint8_t*)ptr + 2) |= (rx_buf[2] >> 3) & 0x1C;
-			*((uint8_t*)ptr + 2) |= rx_buf[2] & 0x03;
-			*((uint8_t*)ptr) = rx_buf[4];
+			*((uint16_t*)ptr + 1) = (uint16_t)recv_rx_buf[1] << 5;
+			*((uint8_t*)ptr + 1) = recv_rx_buf[3];
+			*((uint8_t*)ptr + 2) |= (recv_rx_buf[2] >> 3) & 0x1C;
+			*((uint8_t*)ptr + 2) |= recv_rx_buf[2] & 0x03;
+			*((uint8_t*)ptr) = recv_rx_buf[4];
 			messageBuffer.flags.extended = true;
 		} else
 		{
 			*((uint8_t*)ptr + 3) = 0;
 			*((uint8_t*)ptr + 2) = 0;
-			*((uint16_t*)ptr) = (uint16_t)rx_buf[1] << 3;
-			*((uint8_t*)ptr) |= rx_buf[2] >> 5;
+			*((uint16_t*)ptr) = (uint16_t)recv_rx_buf[1] << 3;
+			*((uint8_t*)ptr) |= recv_rx_buf[2] >> 5;
 		}
 		if (statusBufferR & FLAG_RTR)
 		{
@@ -266,9 +270,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 		{
 			messageBuffer.flags.rtr = false;
 		}
-		messageBuffer.length = rx_buf[5] & 0x0f;
+		messageBuffer.length = recv_rx_buf[5] & 0x0f;
 
-		std::memcpy(messageBuffer.data, &rx_buf[6], messageBuffer.length);
+		std::memcpy(messageBuffer.data, &recv_rx_buf[6], messageBuffer.length);
 		if (not modm_assert_continue_ignore(rxQueue.push(messageBuffer), "mcp2515.can.tx",
 			"CAN transmit software buffer overflowed!", 1)){}
 
@@ -279,7 +283,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	};
 
 	auto processStatusAndPrepareRead = [&]() {
-		statusBufferR = rx_buf[1];
+		statusBufferR = recv_rx_buf[1];
 		readSuccessfulFlag = true;
 
 		if (statusBufferR & FLAG_RXB0_FULL)
@@ -300,36 +304,11 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 
 		if (readSuccessfulFlag)
 		{
-			tx_buf[0] = addressBufferR;
-			tx_buf[1] = 0xff;
+			recv_tx_buf[0] = addressBufferR;
+			recv_tx_buf[1] = 0xff;
 		}
 	};
 
-	auto processStatusAfterRead = [&]() {
-		// statusBufferR = rx_buf[1];
-		// readSuccessfulFlag = true;
-
-		// if (statusBufferR & FLAG_RXB0_FULL)
-		// {
-		// 	addressBufferR = READ_RX ;  // message in buffer 0
-		// 	spiReadDataLength = 1+13 + 1;
-		// }
-		// else if (statusBufferR & FLAG_RXB1_FULL)
-		// {
-		// 	addressBufferR = READ_RX | 0x04;  // message in buffer 1 (RXB1SIDH)
-		// 	spiReadDataLength = 1+13 + 1;
-		// }
-		//  else
-		// {
-		// 	readSuccessfulFlag = false;  // Error: no message available
-		// 	spiReadDataLength = 0;
-		// }
-
-		// if (readSuccessfulFlag){
-		// 	mcp2515ReadMessage();
-		// }
-
-	};
 	////////////////////////////////////////////////////////////////////////////
 
 	// MCP2515 Registers
@@ -343,11 +322,11 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	// 0x66 - 0x6D / 0x76 - 0x7D : RXBnDm: RECEIVE BUFFER n DATA BYTE m REGISTER
 
 
-	databuf[0] = RX_STATUS;
-	databuf[1] = 0xFF;
+	recv_prep_buf[0] = RX_STATUS;
+	recv_prep_buf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{databuf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
-		SpiTransferStep{tx_buf, rx_buf, [&](){return spiReadDataLength;}, readData, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)}
+		SpiTransferStep{recv_prep_buf, recv_rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{recv_tx_buf, recv_rx_buf, [&](){return spiReadDataLength;}, readData, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)}
 	);
 }
 
@@ -476,7 +455,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 
 	/// put can message ionto our tx message buffer
 	auto statusPost = [message](){
-		statusBufferS = rx_buf[1];
+		statusBufferS = send_rx_buf[1];
 		addressBufferS = static_cast<uint8_t>(false);
 		if(mcp2515IsReadyToSend(statusBufferS)){
 			if ((statusBufferS & TXB0CNTRL_TXREQ) == 0)
@@ -497,22 +476,22 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 			if (addressBufferS == 0x00 || addressBufferS == 0x02 || addressBufferS == 0x04){
 				
 				// RF_CALL(spi.transfer(WRITE_TX | addressBufferS));
-				tx_buf[0] = WRITE_TX | addressBufferS;
+				send_tx_buf[0] = WRITE_TX | addressBufferS;
 
 				// fill in 4 bytes:
-				writeIdentifierBuffer(message.identifier, message.flags.extended, &tx_buf[0], 1);
+				writeIdentifierBuffer(message.identifier, message.flags.extended, &send_tx_buf[0], 1);
 
 				// if the message is a rtr-frame, is has a length but no attached data
 				if (message.flags.rtr)
 				{
 					// RF_CALL(spi.transfer(MCP2515_RTR | message.length));
-					tx_buf[5] = MCP2515_RTR | message.length;
+					send_tx_buf[5] = MCP2515_RTR | message.length;
 				} else
 				{
 					// RF_CALL(spi.transfer(message.length));
-					tx_buf[5] = message.length;
+					send_tx_buf[5] = message.length;
 					// payload:
-					std::memcpy(&tx_buf[6], message.data, message.length);
+					std::memcpy(&send_tx_buf[6], message.data, message.length);
 				}
 			}
 		}
@@ -520,16 +499,16 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 
 	auto identifierPost = [&](){
 		addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
-		tx_buf[0] = RTS | addressBufferS;
+		send_tx_buf[0] = RTS | addressBufferS;
 	};
 
 	// go
-	databuf[0] = READ_STATUS;
-	databuf[1] = 0xFF;
+	send_prep_buf[0] = READ_STATUS;
+	send_prep_buf[1] = 0xFF;
 	spi.pipeline(
-		SpiTransferStep{databuf, rx_buf, 2, statusPost, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
-		SpiTransferStep{tx_buf, rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
-		SpiTransferStep{tx_buf, rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)} // skip if no free tx buffer
+		SpiTransferStep{send_prep_buf, send_rx_buf, 2, statusPost, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{send_tx_buf, send_rx_buf, [message](){return 6 + message.length;}, identifierPost, [&](){return addressBufferS != 0xff;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
+		SpiTransferStep{send_tx_buf, send_rx_buf, 1, nullptr, [&](){return addressBufferS != 0xFF;}, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)} // skip if no free tx buffer
 	);
 }
 // ----------------------------------------------------------------------------
