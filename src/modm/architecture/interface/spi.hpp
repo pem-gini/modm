@@ -76,6 +76,7 @@ struct ChipSelectBehaviorWrapper{
 };
 class SpiTransferChipSelectBehavior{
 public:
+	SpiTransferChipSelectBehavior() : pre{nullptr}, post{nullptr} {}
 	SpiTransferChipSelectBehavior(auto wrapper) :
 		pre{[wrapper](){
 			if constexpr (!std::is_void<typename decltype(wrapper)::CS>::value){
@@ -111,6 +112,8 @@ static constexpr SpiTransferChipSelectBehavior CsBehavior(ChipSelect behavior = 
 
 class SpiTransferStep{
 public:
+	SpiTransferStep(): tx{nullptr}, rx{nullptr}, length{nullptr}, cb{nullptr}, condition{nullptr}, configuration{}, cs{}
+	{}
 	SpiTransferStep(const uint8_t* tx_, uint8_t* rx_, auto length_, auto cb_, auto condition_,
 					auto configuration_, SpiTransferChipSelectBehavior csbehavior)
 		: tx{tx_},

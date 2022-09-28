@@ -154,7 +154,8 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	/// we the last dma transfer was a queue thingy and if we have finished a task thingy
 	if(queueTask && dmaTransmitComplete && dmaReceiveComplete){
 		queueTask = false;
-		const auto& entry = queue.front();
+		auto& execEntry = executionQueue.front();
+		SpiTransferEntry& entry = execEntry.front();
 		/// do we want to skip its post stuff?
 		if(!skipPost){
 			/// do its post stuff
@@ -172,9 +173,14 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		// clear the state - block transfer finished
 		state &= ~Bit1;
 
-		/// pop the task from queue
-		queue.pop();
-		/// re trgger ourselfs if necessary
+		/// pop the task from execution queue if this was the last step of the task chain
+		/// or else, keep the task on the execution queue, as we are still working on children
+
+		execEntry.pop(); /// pop step, its done
+		if(execEntry.empty()){
+			executionQueue.pop(); /// pop complete entry, task done
+		}
+		/// re trgger ourselfs with next task in queue, if that is nullptr, the exec will just choose the next one on the queue
 		exec();
 	}
 }

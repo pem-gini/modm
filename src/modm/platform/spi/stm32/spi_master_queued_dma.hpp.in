@@ -15,11 +15,41 @@
 #include <modm/platform/dma/dma.hpp>
 #include "spi_master_{{ id }}.hpp"
 
+#include <tuple>
+
+#include <etl/list.h>
+#include <etl/queue.h>
+
 namespace modm
 {
 
 namespace platform
 {
+
+namespace details{
+	/// reverse tuple 
+	///  	std::tuple<int, double, std::string> a = {42, 3.1415926, "Hello, world!"};
+    /// 	auto b = ReverseTuple(a);
+	template<typename TupR, typename Tup = std::remove_reference_t<TupR>,
+			auto N = std::tuple_size_v<Tup>>
+	constexpr auto ReverseTuple(TupR&& t) {
+		return [&t]<auto... I>(std::index_sequence<I...>) {
+			constexpr std::array is{(N - 1 - I)...};
+			return std::tuple<std::tuple_element_t<is[I], Tup>...>{
+				std::get<is[I]>(std::forward<TupR>(t))...
+			};
+		}(std::make_index_sequence<N>{});
+	}
+	template <typename Tuple1, typename Tuple2> auto zip(Tuple1&& t1, Tuple2&& t2) {
+		static_assert(
+			std::tuple_size<typename std::remove_reference<Tuple1>::type>() == std::tuple_size<typename std::remove_reference<Tuple2>::type>(), "Both tuples need equal length to be zipped!");
+		return std::apply(
+			[&](auto&&... x) {
+				return std::apply([&](auto&&... y) { return std::make_tuple(std::pair(x, y)...); }, t2);
+			},
+			t1);
+	}
+}
 
 /**
  * Serial peripheral interface (SPI{{ id }}) with DMA support.
@@ -40,11 +70,14 @@ class SpiMaster{{ id }}QueuedDma : public SpiMaster{{ id }}
 {
 private:
 	using SpiTransferTask = etl::delegate<bool(const SpiTransferStep& s)>;
-	struct SpiTansferEntry{
+	struct SpiTransferEntry{
 		SpiTransferTask task;
-		SpiTransferStep step;
+		SpiTransferStep step = SpiTransferStep{};
 	};
-	using SpiTransferTaskQueue = etl::queue<SpiTansferEntry, QUEUE_SIZE>;
+
+	static constexpr size_t MaxStepSize = 32;
+	using SpiExecutionEntry = etl::queue<SpiTransferEntry, MaxStepSize>;
+	using SpiTransferExecutionQueue = etl::queue<SpiExecutionEntry, QUEUE_SIZE>;
 	using SpiDataBuffer = std::array<uint8_t,SPI_DATA_BUFFER_LENGTH>;
 	using SpiDataQueue = std::array<SpiDataBuffer, SPI_DATA_BUFFER_COUNT>;
 
@@ -92,12 +125,17 @@ public:
 	* gets automatically emptied
 	/*/
 	template <typename... Steps>
-	static constexpr void pipeline(SpiTransferStep&& step, Steps... rest){
-		transferBegin(std::move(step));
-		std::apply([](auto&&... s){
-			((transferNext(s)), ...);
-		}, std::tie(rest...));
-		/// queue prepared, exec queue
+	static constexpr void pipeline(SpiTransferStep&& first, Steps... steps){
+		SpiExecutionEntry e;
+		/// call begin on first element last
+		const auto& head = transferBegin(std::move(first));
+		e.push(head);
+		/// call next on all other elements
+		std::apply([&e](auto&&... step){
+			((e.push(transferNext(step))), ...);
+		}, std::tie(steps...));
+		/// add these to execution queue
+		pushExec(e);
 		exec();
 	};
 
@@ -123,28 +161,31 @@ public:
 	static modm::ResumableResult<void>
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
-private:
-	static constexpr void transferBegin(SpiTransferStep&& step){
+private: 
+	static constexpr auto transferBegin(SpiTransferStep&& step){
+		SpiTransferEntry entry;
 		auto length = step.length();
 		if(length > SPI_DATA_BUFFER_LENGTH){
-			return;
+			return entry;
 		}
 		uint8_t* buf = buffers.at(nextBuffer).data();
 		std::memcpy(buf, step.tx, length);
 		step.tx = buf;
 		// ---------------------------
 		auto task = createTask();
-		push({.task = task, .step = step });
+		entry = SpiTransferEntry{.task = task, .step = step};
 		// ---------------------------
 		nextBuffer++;
 		if(nextBuffer >= SPI_DATA_BUFFER_COUNT){
 			nextBuffer = 0;
 		}
+		return entry;
 	}
 
-	static constexpr void transferNext(auto&& step){
+	static constexpr auto transferNext(auto&& step){
 		auto task = createTask();
-		push({.task = task, .step = step });
+		auto entry = SpiTransferEntry{.task = task, .step = step };
+		return entry;
 	}
 	static constexpr void transferNext(){}
 
@@ -198,29 +239,35 @@ private:
 	static void
 	handleDmaTransmitComplete();
 
-
 	/** kikass13:
-	* Push a given Task + meta information onto the dma queue for later execution
+	* Push a given Task pointer onto the dma queue for later execution
 	*/
-	static constexpr void push(SpiTansferEntry&& entry)
+	static constexpr void pushExec(SpiExecutionEntry& entry)
 	{
 		/// push entry onto queue if not full
-		if(!queue.full()){
-			queue.push(entry);
+		if(!executionQueue.full()){
+			executionQueue.push(entry);
 		}
 	}
 
+
 	/** kikass13:
 	* execute the next task on the dma queue when we have nothing else currently going on
+	* else, if the current execution task stil has valid steps, execute these instead
 	*/
 	static constexpr void exec()
 	{
 		/// exec the current task from queue if nothing else is going on
-		if(!queue.empty() && state == 0 && (dmaTransmitComplete && dmaReceiveComplete)){
+		if(!executionQueue.empty() && state == 0 && (dmaTransmitComplete && dmaReceiveComplete)){
 			queueTask = true;
-			const auto& entry = queue.front();
+			bool didADmaThing = false;
+			/// set entry to next queue entry
+			SpiExecutionEntry& execEntry = executionQueue.front();
+			SpiTransferEntry& entry = execEntry.front();
 			/// exec task now
-			bool didADmaThing = entry.task(entry.step);
+			if(entry.task.is_valid()){
+				didADmaThing = entry.task(entry.step);
+			}
 			/// if task has not done anything, becasue its conditional failed
 			/// pretend that we are finished, but skip the post stuff of the given task
 			if(!didADmaThing){
@@ -228,6 +275,7 @@ private:
 			}
 		}
 	}
+
 
 	/** kikass13:
 	* do end routine after a task is finished (dma transfer complete) and call exec, 
@@ -244,7 +292,8 @@ private:
 	// needed for transfers where no RX or TX buffers are given
 	static inline uint8_t dmaDummy { 0 };
 
-	static inline SpiTransferTaskQueue queue;
+	static inline SpiTransferExecutionQueue executionQueue;
+
 	static inline SpiDataQueue buffers;
 	static inline size_t nextBuffer = 0;
 	static inline bool queueTask = false;

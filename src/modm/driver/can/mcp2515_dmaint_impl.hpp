@@ -96,26 +96,27 @@ template<modm::frequency_t externalClockFrequency, modm::bitrate_t bitrate,
 bool
 modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 {
-	modm::platform::Exti::enableInterrupts<INT>();
-	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
-		using namespace mcp2515;
-		/// kikass13:
-		/// for unknown reasons: 
-		/// do not disable/enable interrupts in here, because this leads to problems with the dma->spi pipeline for some reason
-		/// ill leave this here as a reminder, that this is intentional and that we dont interrupt the gpio interrupt, 
-		/// so that this readMessage (dma pipeline queue pushs) will be an atomic thing
-		// uint32_t primask = __get_PRIMASK();
-		// __disable_irq();  // disable all interrupts
-		mcp2515ReadMessage();
-		// __enable_irq();   // enable all interrupts
-		// if (!primask) {
-   		//  __enable_irq();
-  		// }
-	});
-
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
-	return initializeWithPrescaler(Timings::getPrescaler(), Timings::getSJW(), Timings::getProp(),
+	bool init = initializeWithPrescaler(Timings::getPrescaler(), Timings::getSJW(), Timings::getProp(),
 								   Timings::getPS1(), Timings::getPS2());
+	if(init){
+		modm::platform::Exti::enableInterrupts<INT>();
+		modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
+			using namespace mcp2515;
+			/// kikass13:
+			/// for unknown reasons: 
+			/// do not disable/enable interrupts in here, because this leads to problems with the dma->spi pipeline for some reason
+			/// ill leave this here as a reminder, that this is intentional and that we dont interrupt the gpio interrupt, 
+			/// so that this readMessage (dma pipeline queue pushs) will be an atomic thing
+			// uint32_t primask = __get_PRIMASK();
+			// __disable_irq();  // disable all interrupts
+			mcp2515ReadMessage();
+			// if (!primask) {
+			//  __enable_irq();
+			// }
+		});
+	}
+	return init;
 }
 
 // ----------------------------------------------------------------------------
@@ -124,6 +125,10 @@ void
 modm::Mcp2515DmaInt<SPI, CS, INT>::setFilter(accessor::Flash<uint8_t> filter)
 {
 	using namespace mcp2515;
+
+	// disable interrupts for the duration of setting the filter, so that we dont interfere with anything on the bus while setting it
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();  // disable all interrupts
 
 	// change to configuration mode
 	bitModify(CANCTRL, 0xe0, REQOP2);
@@ -150,6 +155,10 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::setFilter(accessor::Flash<uint8_t> filter)
 	}
 	chipSelect.set();
 	bitModify(CANCTRL, 0xe0, 0);
+
+	if (!primask) {
+		__enable_irq();
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -500,6 +509,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 	auto identifierPost = [&](){
 		addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
 		send_tx_buf[0] = RTS | addressBufferS;
+		send_tx_buf[1] = 0xff;
 	};
 
 	// go
