@@ -465,7 +465,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 	/// put can message ionto our tx message buffer
 	auto statusPost = [message](){
 		statusBufferS = send_rx_buf[1];
-		addressBufferS = static_cast<uint8_t>(false);
+		addressBufferS = 0xFF;
 		if(mcp2515IsReadyToSend(statusBufferS)){
 			if ((statusBufferS & TXB0CNTRL_TXREQ) == 0)
 			{
