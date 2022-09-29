@@ -26,31 +26,6 @@ namespace modm
 namespace platform
 {
 
-namespace details{
-	/// reverse tuple 
-	///  	std::tuple<int, double, std::string> a = {42, 3.1415926, "Hello, world!"};
-    /// 	auto b = ReverseTuple(a);
-	template<typename TupR, typename Tup = std::remove_reference_t<TupR>,
-			auto N = std::tuple_size_v<Tup>>
-	constexpr auto ReverseTuple(TupR&& t) {
-		return [&t]<auto... I>(std::index_sequence<I...>) {
-			constexpr std::array is{(N - 1 - I)...};
-			return std::tuple<std::tuple_element_t<is[I], Tup>...>{
-				std::get<is[I]>(std::forward<TupR>(t))...
-			};
-		}(std::make_index_sequence<N>{});
-	}
-	template <typename Tuple1, typename Tuple2> auto zip(Tuple1&& t1, Tuple2&& t2) {
-		static_assert(
-			std::tuple_size<typename std::remove_reference<Tuple1>::type>() == std::tuple_size<typename std::remove_reference<Tuple2>::type>(), "Both tuples need equal length to be zipped!");
-		return std::apply(
-			[&](auto&&... x) {
-				return std::apply([&](auto&&... y) { return std::make_tuple(std::pair(x, y)...); }, t2);
-			},
-			t1);
-	}
-}
-
 /**
  * Serial peripheral interface (SPI{{ id }}) with DMA support.
  *
