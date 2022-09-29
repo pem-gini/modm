@@ -75,7 +75,7 @@ private:
 		SpiTransferStep step = SpiTransferStep{};
 	};
 
-	static constexpr size_t MaxStepSize = 32;
+	static constexpr size_t MaxStepSize = 8;
 	using SpiExecutionEntry = etl::queue<SpiTransferEntry, MaxStepSize>;
 	using SpiTransferExecutionQueue = etl::queue<SpiExecutionEntry, QUEUE_SIZE>;
 	using SpiDataBuffer = std::array<uint8_t,SPI_DATA_BUFFER_LENGTH>;
@@ -125,11 +125,10 @@ public:
 	* gets automatically emptied
 	/*/
 	template <typename... Steps>
-	static constexpr void pipeline(SpiTransferStep&& first, Steps... steps){
+	static constexpr void pipeline(SpiTransferStep&& first, Steps&&... steps){
 		SpiExecutionEntry e;
 		/// call begin on first element last
-		const auto& head = transferBegin(std::move(first));
-		e.push(head);
+		e.push(transferBegin(std::move(first)));
 		/// call next on all other elements
 		std::apply([&e](auto&&... step){
 			((e.push(transferNext(step))), ...);
@@ -163,29 +162,22 @@ public:
 
 private: 
 	static constexpr auto transferBegin(SpiTransferStep&& step){
-		SpiTransferEntry entry;
 		auto length = step.length();
 		if(length > SPI_DATA_BUFFER_LENGTH){
-			return entry;
+			return SpiTransferEntry{};
 		}
 		uint8_t* buf = buffers.at(nextBuffer).data();
 		std::memcpy(buf, step.tx, length);
 		step.tx = buf;
-		// ---------------------------
-		auto task = createTask();
-		entry = SpiTransferEntry{.task = task, .step = step};
-		// ---------------------------
 		nextBuffer++;
 		if(nextBuffer >= SPI_DATA_BUFFER_COUNT){
 			nextBuffer = 0;
 		}
-		return entry;
+		return SpiTransferEntry{.task = createTask(), .step = step};
 	}
 
-	static constexpr auto transferNext(auto&& step){
-		auto task = createTask();
-		auto entry = SpiTransferEntry{.task = task, .step = step };
-		return entry;
+	static constexpr auto transferNext(auto&& step) {
+		return SpiTransferEntry{.task = createTask(), .step = step };
 	}
 	static constexpr void transferNext(){}
 
@@ -198,7 +190,7 @@ private:
 	static void 
 	basicTransfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
-	static constexpr SpiTransferTask createTask(){
+	static constexpr auto createTask(){
 		return [](const SpiTransferStep& step){
 			bool work = true;
 			if(step.condition){

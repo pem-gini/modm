@@ -249,7 +249,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	using namespace mcp2515;
 
 
-	auto readData = [&]() {
+	static constexpr auto readData = [&]() {
 		/// DELAY for ~50ns, to ensure that the chipselect has had time to properly reset the interrupt flag of the mcp
 		/// this is necessary, so that we can check the int pin later for a second consecutive read command, in case th int pin is still low
 		modm::delay(100ns);
@@ -291,7 +291,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 		}
 	};
 
-	auto processStatusAndPrepareRead = [&]() {
+	static constexpr auto processStatusAndPrepareRead = [&]() {
 		statusBufferR = recv_rx_buf[1];
 		readSuccessfulFlag = true;
 
@@ -339,107 +339,6 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 	);
 }
 
-/*
-template<typename SPI, typename CS, typename INT>
-void
-modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
-{
-	using namespace mcp2515;
-
-	auto copyResultCanMessage = [&]() {
-		std::memcpy(messageBuffer.data, rx_buf, messageBuffer.length);
-		if (not modm_assert_continue_ignore(rxQueue.push(messageBuffer), "mcp2515.can.tx",
-			"CAN transmit software buffer overflowed!", 1)){}
-	};
-	auto readCanMessage = [&]() {
-		const uint32_t *ptr = &messageBuffer.identifier;
-		messageBuffer.flags.extended = false;
-
-		if (rx_buf[2] & MCP2515_IDE)
-		{
-			*((uint16_t*)ptr + 1) = (uint16_t)rx_buf[1] << 5;
-			*((uint8_t*)ptr + 1) = rx_buf[3];
-			*((uint8_t*)ptr + 2) |= (rx_buf[2] >> 3) & 0x1C;
-			*((uint8_t*)ptr + 2) |= rx_buf[2] & 0x03;
-			*((uint8_t*)ptr) = rx_buf[4];
-			messageBuffer.flags.extended = true;
-		} else
-		{
-			*((uint8_t*)ptr + 3) = 0;
-			*((uint8_t*)ptr + 2) = 0;
-			*((uint16_t*)ptr) = (uint16_t)rx_buf[1] << 3;
-			*((uint8_t*)ptr) |= rx_buf[2] >> 5;
-		}
-		if (statusBufferR & FLAG_RTR)
-		{
-			messageBuffer.flags.rtr = true;
-		} else
-		{
-			messageBuffer.flags.rtr = false;
-		}
-		messageBuffer.length = rx_buf[5] & 0x0f;
-
-		// new DMA transfer, because we know buffer length now
-		std::memset(tx_buf, 0xFF, messageBuffer.length);
-	};
-	auto processStatusAndPrepareRead = [&]() {
-		statusBufferR = rx_buf[1];
-		readSuccessfulFlag = true;
-
-		if (statusBufferR & (FLAG_RXB0_FULL | FLAG_RXB1_FULL))
-		{
-			// data in both registers, begin read with register 0:
-			addressBufferR = READ_RX;  // message in buffer 0
-			spiReadDataLength = 12;
-
-		} else if (statusBufferR & FLAG_RXB0_FULL)
-		{
-			addressBufferR = READ_RX ;  // message in buffer 0
-			spiReadDataLength = 6;
-		}
-		else if (statusBufferR & FLAG_RXB1_FULL)
-		{
-			addressBufferR = READ_RX | 0x04;  // message in buffer 1 (RXB1SIDH)
-			spiReadDataLength = 6;
-		}
-		 else
-		{
-			readSuccessfulFlag = false;  // Error: no message available
-			spiReadDataLength = 0;
-		}
-
-		if (readSuccessfulFlag)
-		{
-			tx_buf[0] = addressBufferR;
-			tx_buf[1] = 0xff;
-			tx_buf[2] = 0xff;
-			tx_buf[3] = 0xff;
-			tx_buf[4] = 0xff;
-			tx_buf[5] = 0xff;
-		}
-	};
-	////////////////////////////////////////////////////////////////////////////
-
-	// MCP2515 Registers
-	// 0x61 / 0x71 : RXBnSIDH : RECEIVE BUFFER n STANDARD IDENTIFIER REGISTER HIGH
-	// 0x62 / 0x72 : RXBnSIDL : RECEIVE BUFFER n STANDARD IDENTIFIER REGISTER LOW
-	// 0x63 / 0x73 : RXBnEID8 : RECEIVE BUFFER n EXTENDED IDENTIFIER REGISTER HIGH
-	// 0x64 / 0x74 : RXBnEID0: RECEIVE BUFFER n EXTENDED IDENTIFIER REGISTER LOW
-
-	// 0x65 / 0x75 : RXBnDLC: RECEIVE BUFFER n DATA LENGTH CODE REGISTER
-
-	// 0x66 - 0x6D / 0x76 - 0x7D : RXBnDm: RECEIVE BUFFER n DATA BYTE m REGISTER
-
-
-	tx_buf[0] = RX_STATUS;
-	tx_buf[1] = 0xFF;
-	spi.pipeline(
-		SpiTransferStep{tx_buf, rx_buf, 2, processStatusAndPrepareRead, nullptr, configuration, CsBehavior<CS>(ChipSelect::TOGGLE)},
-		SpiTransferStep{tx_buf, rx_buf, [&](){return spiReadDataLength;}, readCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::RESET)},
-		SpiTransferStep{tx_buf, rx_buf, [&](){return messageBuffer.length;}, copyResultCanMessage, [&](){return readSuccessfulFlag;}, configuration, CsBehavior<CS>(ChipSelect::SET)}
-	);
-}
-*/
 // ----------------------------------------------------------------------------
 template<typename SPI, typename CS, typename INT>
 bool
@@ -506,7 +405,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 		}
 	};
 
-	auto identifierPost = [&](){
+	static constexpr auto identifierPost = [&](){
 		addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
 		send_tx_buf[0] = RTS | addressBufferS;
 		send_tx_buf[1] = 0xff;
