@@ -365,6 +365,9 @@ public:
 	static bool areFlagsSet()
 	{ return EXTI->PR{{pf}} & {{pins}}; }
 
+	static bool isFlagsSet(uint8_t line)
+	{ return (EXTI->PR{{pf}} & (1 << line)); }
+
 	inline static void
 	acknowledgeFlags(MaskType mask)
 	{

@@ -114,7 +114,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 			// if (!primask) {
 			//  __enable_irq();
 			// }
-		});
+		}, 7);
 	}
 	return init;
 }

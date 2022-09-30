@@ -24,7 +24,7 @@ void Exti::irq(uint32_t mask)
 	{
 		const uint8_t lmb = 31ul - __builtin_clz(flags);
 		auto& fn = handlers[lmb];
-		if (fn) fn(lmb);
+		if (fn && Exti::isFlagsSet(lmb)) fn(lmb);
 %% if separate_flags
 		EXTI->FPR1 = 1ul << lmb;
 		EXTI->RPR1 = 1ul << lmb;

@@ -339,6 +339,23 @@ public:
 			NVIC_SetPriority(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)], priority);
 			NVIC_EnableIRQ(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)]);
 		}
+
+		/**
+		 * set the IRQ  priority value with a given priority group to
+           preemptive priority value and subpriority value. of the channel
+		 *
+		 * \param [in]     PriorityGroup  Used priority group.
+ 		 * \param [in]   PreemptPriority  Preemptive priority value (starting from 0).
+ 		 * \param [in]       SubPriority  Subpriority value (starting from 0).
+		 */
+		static void
+		setInterruptPriorityWithPreemptive(uint32_t PriorityGroup = 0, uint32_t PreemptPriority = 0, uint32_t SubPriority = 1)
+		{
+			uint32_t val = NVIC_EncodePriority(PriorityGroup, PreemptPriority, SubPriority);
+			NVIC_SetPriority(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)], val);
+			NVIC_EnableIRQ(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)]);
+		}
+
 		/**
 		 * Disable the IRQ vector of the channel
 		 */
