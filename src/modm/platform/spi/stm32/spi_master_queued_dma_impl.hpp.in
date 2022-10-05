@@ -26,8 +26,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	Dma::RxChannel::setPeripheralAddress(SPI{{ id }}_BASE + 0x0c);
 	Dma::RxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
 	Dma::RxChannel::setTransferCompleteIrqHandler(handleDmaReceiveComplete);
-	// Dma::RxChannel::enableInterruptVector();
-	Dma::RxChannel::setInterruptPriorityWithPreemptive(0,0,0);
+	Dma::RxChannel::enableInterruptVector(2);
 	Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
 			DmaBase::InterruptEnable::TransferComplete);
 	Dma::RxChannel::template setPeripheralRequest<Dma::RxRequest>();
@@ -39,8 +38,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	Dma::TxChannel::setPeripheralAddress(SPI{{ id }}_BASE + 0x0c);
 	Dma::TxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
 	Dma::TxChannel::setTransferCompleteIrqHandler(handleDmaTransmitComplete);
-	// Dma::TxChannel::enableInterruptVector();
-	Dma::TxChannel::setInterruptPriorityWithPreemptive(0,0,0);
+	Dma::TxChannel::enableInterruptVector(1);
 	Dma::TxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
 			DmaBase::InterruptEnable::TransferComplete);
 	Dma::TxChannel::template setPeripheralRequest<Dma::TxRequest>();
