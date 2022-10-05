@@ -135,22 +135,18 @@ template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaReceiveComplete()
 {
-	GPIOB->ODR |= (1 << 15);
-	//Dma::RxChannel::stop();
+	Dma::RxChannel::stop();
 	dmaReceiveComplete = true;
 	end();
-	GPIOB->ODR &= ~(1 << 15);
 }
 
 template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransmitComplete()
 {
-	GPIOH->ODR |= (1 << 4);
-	//Dma::TxChannel::stop();
+	Dma::TxChannel::stop();
 	dmaTransmitComplete = true;
 	end();
-	GPIOH->ODR &= ~(1 << 4);
 }
 
 template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>

@@ -220,7 +220,7 @@ private:
 	/** kikass13:
 	* Push a given Task pointer onto the dma queue for later execution
 	*/
-	static constexpr void pushExec(SpiExecutionEntry& entry)
+	static constexpr void pushExec(const SpiExecutionEntry& entry)
 	{
 		/// push entry onto queue if not full
 		if(!executionQueue.full()){

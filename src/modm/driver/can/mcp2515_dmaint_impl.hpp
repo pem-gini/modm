@@ -103,21 +103,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 		modm::platform::Exti::enableInterrupts<INT>();
 		modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
 			using namespace mcp2515;
-			/// kikass13:
-			/// for unknown reasons: 
-			/// do not disable/enable interrupts in here, because this leads to problems with the dma->spi pipeline for some reason
-			/// ill leave this here as a reminder, that this is intentional and that we dont interrupt the gpio interrupt, 
-			/// so that this readMessage (dma pipeline queue pushs) will be an atomic thing
-			// uint32_t primask = __get_PRIMASK();
-			// __disable_irq();  // disable all interrupts
-			//mcp2515ReadMessage();
-			// if (!primask) {
-			//  __enable_irq();
-			// }
-			GPIOH->ODR |= (1<<3);
-			//spi.exec();
 			mcp2515ReadMessage();
-			GPIOH->ODR &= ~(1<<3);
 		}, 0);
 	}
 	return init;
@@ -234,14 +220,7 @@ bool
 modm::Mcp2515DmaInt<SPI, CS, INT>::sendMessage(const can::Message &message)
 {
 	using namespace mcp2515;
-	// __disable_irq();  // disable all interrupts
-	// uint32_t primask = __get_PRIMASK();
-	// __disable_irq();
 	mcp2515SendMessage(message);
-	// __enable_irq();   // enable all interrupts
-	// if (!primask) {
-    // 	__enable_irq();
-  	// }
 	return true;
 }
 
@@ -285,7 +264,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 		}
 		messageBuffer.length = recv_rx_buf[5] & 0x0f;
 
-		std::memcpy(messageBuffer.data, &recv_rx_buf[6], messageBuffer.length);
+		std::memcpy(messageBuffer.data, &recv_rx_buf[6], 8);
 		if (not modm_assert_continue_ignore(rxQueue.push(messageBuffer), "mcp2515.can.tx",
 			"CAN transmit software buffer overflowed!", 1)){}
 
@@ -403,7 +382,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 					// RF_CALL(spi.transfer(message.length));
 					send_tx_buf[5] = message.length;
 					// payload:
-					std::memcpy(&send_tx_buf[6], message.data, message.length);
+					std::memcpy(&send_tx_buf[6], message.data, 8);
 				}
 			}
 		}
