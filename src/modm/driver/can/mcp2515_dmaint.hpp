@@ -114,8 +114,6 @@ class Mcp2515DmaInt : public modm::Can
 		.pre = [](){
 			SPI::setDataMode(SPI::DataMode::Mode0);
 			SPI::setDataOrder(SPI::DataOrder::MsbFirst);
-		},
-		.post = [](){
 		}
 	}; 
 

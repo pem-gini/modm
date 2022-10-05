@@ -53,7 +53,6 @@ struct Spi
 
 struct SpiTransferConfiguration{
 	etl::delegate<void()> pre;
-	etl::delegate<void()> post;
 };
 // using SpiTransferConditional = etl::delegate<bool()>;
 // using SpiTransferLength = etl::delegate<std::size_t()>;

@@ -242,8 +242,6 @@ private:
 		.pre = [](){
 			SpiQueuedDma::setDataMode(SpiQueuedDma::DataMode::Mode3);
 			SpiQueuedDma::setDataOrder(SpiQueuedDma::DataOrder::MsbFirst);
-		},
-		.post = [](){
 		}
 	};
 

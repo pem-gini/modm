@@ -89,9 +89,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	csbehavior.pre();
 	uint8_t read = transferBlockingSingleByte(data);
 	csbehavior.post();
-	if(configuration.post){
-		configuration.post();
-	}
+	// if(configuration.post){
+	// 	configuration.post();
+	// }
 	return read;
 }
 
@@ -115,9 +115,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		rx[i] = transferBlockingSingleByte(b);
 	}
 	csbehavior.post();
-	if(configuration.post){
-		configuration.post();
-	}
+	// if(configuration.post){
+	// 	configuration.post();
+	// }
 }
 
 template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
@@ -161,9 +161,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		/// do we want to skip its post stuff?
 		if(!skipPost){
 			/// do its post stuff
-			if(entry.step.configuration.post){
-				entry.step.configuration.post();
-			}
+			// if(entry.step.configuration.post){
+			// 	entry.step.configuration.post();
+			// }
 			/// call cs post behavor
 			entry.step.cs.post();
 			/// call step callback
