@@ -108,9 +108,20 @@ public:
 		std::apply([&e](auto&&... step){
 			((e.push(transferNext(step))), ...);
 		}, std::tie(steps...));
+		
+		/// Disable Interrupt to be Multithreading-Safe
+		uint32_t primask = __get_PRIMASK();
+		__disable_irq();
+
 		/// add these to execution queue
 		pushExec(e);
+		/// kickstart queue
 		exec();
+
+		/// Enable Interrupts if enabled before
+		if (!primask) {
+    		__enable_irq();
+  		}
 	};
 
 	/** kikass13:

@@ -317,6 +317,7 @@ public:
 %% endif
 
 			auto isr { ControlHal::getInterruptFlags() };
+			ControlHal::clearInterruptFlags(InterruptFlags::Global, ChannelID);
 			if (isr & TE_Flag) {
 				disable();
 				if (transferError)
@@ -325,7 +326,7 @@ public:
 			if ((isr & TC_Flag) and transferComplete)
 				transferComplete();
 
-			ControlHal::clearInterruptFlags(InterruptFlags::Global, ChannelID);
+			
 		}
 
 		/**

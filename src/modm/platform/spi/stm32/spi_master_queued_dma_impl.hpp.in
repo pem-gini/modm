@@ -27,7 +27,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	Dma::RxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
 	Dma::RxChannel::setTransferCompleteIrqHandler(handleDmaReceiveComplete);
 	// Dma::RxChannel::enableInterruptVector();
-	Dma::RxChannel::setInterruptPriorityWithPreemptive(0,0,1);
+	Dma::RxChannel::setInterruptPriorityWithPreemptive(0,0,0);
 	Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
 			DmaBase::InterruptEnable::TransferComplete);
 	Dma::RxChannel::template setPeripheralRequest<Dma::RxRequest>();
@@ -40,7 +40,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	Dma::TxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
 	Dma::TxChannel::setTransferCompleteIrqHandler(handleDmaTransmitComplete);
 	// Dma::TxChannel::enableInterruptVector();
-	Dma::TxChannel::setInterruptPriorityWithPreemptive(0,0,8);
+	Dma::TxChannel::setInterruptPriorityWithPreemptive(0,0,0);
 	Dma::TxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
 			DmaBase::InterruptEnable::TransferComplete);
 	Dma::TxChannel::template setPeripheralRequest<Dma::TxRequest>();
@@ -135,18 +135,22 @@ template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaReceiveComplete()
 {
-	Dma::RxChannel::stop();
+	GPIOB->ODR |= (1 << 15);
+	//Dma::RxChannel::stop();
 	dmaReceiveComplete = true;
 	end();
+	GPIOB->ODR &= ~(1 << 15);
 }
 
 template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
 void
 modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransmitComplete()
 {
-	Dma::TxChannel::stop();
+	GPIOH->ODR |= (1 << 4);
+	//Dma::TxChannel::stop();
 	dmaTransmitComplete = true;
 	end();
+	GPIOH->ODR &= ~(1 << 4);
 }
 
 template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>

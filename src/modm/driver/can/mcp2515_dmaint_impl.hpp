@@ -110,11 +110,15 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 			/// so that this readMessage (dma pipeline queue pushs) will be an atomic thing
 			// uint32_t primask = __get_PRIMASK();
 			// __disable_irq();  // disable all interrupts
-			mcp2515ReadMessage();
+			//mcp2515ReadMessage();
 			// if (!primask) {
 			//  __enable_irq();
 			// }
-		}, 7);
+			GPIOH->ODR |= (1<<3);
+			//spi.exec();
+			mcp2515ReadMessage();
+			GPIOH->ODR &= ~(1<<3);
+		}, 0);
 	}
 	return init;
 }
