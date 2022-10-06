@@ -207,7 +207,7 @@ private:
 						  uint8_t start_index);
 
 private:
-	inline static modm::mcp2515::options::TX_QUEUE txQueue;
+	// inline static modm::mcp2515::options::TX_QUEUE txQueue;
 	inline static modm::mcp2515::options::RX_QUEUE rxQueue;
 
 	static SPI spi;

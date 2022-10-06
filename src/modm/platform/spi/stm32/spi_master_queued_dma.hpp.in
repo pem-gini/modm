@@ -124,6 +124,10 @@ public:
   		}
 	};
 
+	static constexpr bool hasSpaceFor(unsigned int n){
+		return QUEUE_SIZE - executionQueue.size() >= n;
+	}
+
 	/** kikass13:
 	* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
 	* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty

@@ -211,7 +211,11 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::isReadyToSend()
 {
 	using namespace mcp2515;
 
-	return txQueue.isNotFull();
+	/// kikass13:
+	/// we dont use the tx queue anymore
+	// return txQueue.isNotFull();
+	/// so we return if we can put a single send pipeline + 1 interrupt read onto the dma instead 
+	return spi.hasSpaceFor(1+1);
 }
 
 // ----------------------------------------------------------------------------
@@ -220,8 +224,11 @@ bool
 modm::Mcp2515DmaInt<SPI, CS, INT>::sendMessage(const can::Message &message)
 {
 	using namespace mcp2515;
-	mcp2515SendMessage(message);
-	return true;
+	if(isReadyToSend()){
+		mcp2515SendMessage(message);
+		return true;
+	}
+	return false;
 }
 
 // ----------------------------------------------------------------------------
