@@ -104,7 +104,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 		modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
 			using namespace mcp2515;
 			mcp2515ReadMessage();
-		}, 0);
+		});
 	}
 	return init;
 }
