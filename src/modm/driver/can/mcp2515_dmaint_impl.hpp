@@ -99,14 +99,17 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
 	bool init = initializeWithPrescaler(Timings::getPrescaler(), Timings::getSJW(), Timings::getProp(),
 								   Timings::getPS1(), Timings::getPS2());
-	if(init){
-		modm::platform::Exti::enableInterrupts<INT>();
-		modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
-			using namespace mcp2515;
-			mcp2515ReadMessage();
-		});
-	}
 	return init;
+}
+
+template<typename SPI, typename CS, typename INT>
+void
+modm::Mcp2515DmaInt<SPI, CS, INT>::enableInterrupts(){
+	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
+		using namespace mcp2515;
+		mcp2515ReadMessage();
+	});
+	modm::platform::Exti::enableInterrupts<INT>();
 }
 
 // ----------------------------------------------------------------------------
@@ -115,10 +118,6 @@ void
 modm::Mcp2515DmaInt<SPI, CS, INT>::setFilter(accessor::Flash<uint8_t> filter)
 {
 	using namespace mcp2515;
-
-	// disable interrupts for the duration of setting the filter, so that we dont interfere with anything on the bus while setting it
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();  // disable all interrupts
 
 	// change to configuration mode
 	bitModify(CANCTRL, 0xe0, REQOP2);
@@ -145,10 +144,6 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::setFilter(accessor::Flash<uint8_t> filter)
 	}
 	chipSelect.set();
 	bitModify(CANCTRL, 0xe0, 0);
-
-	if (!primask) {
-		__enable_irq();
-	}
 }
 
 // ----------------------------------------------------------------------------

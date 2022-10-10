@@ -81,6 +81,10 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		modm::SpiTransferConfiguration& configuration, 
 		SpiTransferChipSelectBehavior&& csbehavior)
 {
+	while(state != 0){}
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
 	if(configuration.pre){
 		configuration.pre();
 	}
@@ -90,6 +94,10 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	// if(configuration.post){
 	// 	configuration.post();
 	// }
+	if (!primask) {
+		__enable_irq();
+	}
+
 	return read;
 }
 
@@ -104,6 +112,10 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		modm::SpiTransferConfiguration& configuration, 
 		SpiTransferChipSelectBehavior&& csbehavior)
 {
+	while(state != 0){}
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
 	if(configuration.pre){
 		configuration.pre();
 	}
@@ -116,6 +128,9 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	// if(configuration.post){
 	// 	configuration.post();
 	// }
+	if (!primask) {
+		__enable_irq();
+	}
 }
 
 template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
@@ -179,6 +194,10 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 		execEntry.pop(); /// pop step, its done
 		if(execEntry.empty()){
 			executionQueue.pop(); /// pop complete entry, task done
+			/// if tryToDisable is set, we disable now!
+			if(tryToDisable){
+				enabled = false;
+			}
 		}
 		/// re trgger ourselfs with next task in queue, if that is nullptr, the exec will just choose the next one on the queue
 		exec();

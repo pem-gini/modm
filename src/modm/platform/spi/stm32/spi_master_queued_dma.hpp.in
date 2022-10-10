@@ -150,6 +150,24 @@ public:
 	static modm::ResumableResult<void>
 	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
 
+	modm::ResumableResult<void> disable(){
+		tryToDisable = true;
+		if(!executionQueue.empty() && enabled){
+			return modm::rf::Running;
+		}
+		return modm::rf::Stop;
+	}
+	/// wait for the queue to be idle and enable the queue , kickstart next transfer 
+	modm::ResumableResult<void> enable(){
+		if(state != 0){
+			return modm::rf::Running;
+		}
+		tryToDisable = false;
+		enabled = true;
+		exec();
+		return modm::rf::Stop;
+	}
+
 private: 
 	static constexpr auto transferBegin(SpiTransferStep&& step){
 		auto length = step.length();
@@ -240,7 +258,7 @@ private:
 	static constexpr void exec()
 	{
 		/// exec the current task from queue if nothing else is going on
-		if(!executionQueue.empty() && state == 0 && (dmaTransmitComplete && dmaReceiveComplete)){
+		if(enabled && !executionQueue.empty() && state == 0 && (dmaTransmitComplete && dmaReceiveComplete)){
 			queueTask = true;
 			bool didADmaThing = false;
 			/// set entry to next queue entry
@@ -279,6 +297,8 @@ private:
 	static inline SpiDataQueue buffers;
 	static inline size_t nextBuffer = 0;
 	static inline bool queueTask = false;
+	static inline bool tryToDisable = false;
+	static inline bool enabled = true;
 };
 
 } // namespace platform

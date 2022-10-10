@@ -37,6 +37,8 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegister(Register reg)
 {
 	RF_BEGIN();
 
+	RF_CALL(spi.disable());
+
 	if (getRegisterAccess(reg) == AccessMethod::Write) {
 		// Reading this register is not permitted
 		RF_RETURN(std::nullopt);
@@ -67,6 +69,8 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegister(Register reg)
 	}
 	timeout.restart(tStall);
 
+	RF_CALL(spi.enable());
+
 	RF_END_RETURN((static_cast<uint16_t>(buffer[2]) << 8) | buffer[3]);
 }
 
@@ -93,6 +97,8 @@ modm::ResumableResult<bool>
 Adis16470DmaInt<SpiQueuedDma, Cs>::writeRegister(Register reg, uint16_t value)
 {
 	RF_BEGIN();
+
+	RF_CALL(spi.disable());
 
 	if (getRegisterAccess(reg) == AccessMethod::Read) {
 		// Writing to this register is not permitted
@@ -125,6 +131,8 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::writeRegister(Register reg, uint16_t value)
 		Cs::set();
 	}
 	timeout.restart(tStall);
+
+	RF_CALL(spi.enable());
 
 	RF_END_RETURN(true);
 }
@@ -175,6 +183,8 @@ modm::ResumableResult<bool>
 Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterSequence(std::span<const Register> sequence, std::span<uint16_t> values)
 {
 	RF_BEGIN();
+
+	RF_CALL(spi.disable());
 
 	if(sequence.size() != values.size()) {
 		// Mismatching std::span sizes
@@ -227,6 +237,8 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterSequence(std::span<const Register
 	}
 	timeout.restart(tStall);
 
+	RF_CALL(spi.enable());
+
 	RF_END_RETURN(true);
 }
 
@@ -235,6 +247,8 @@ modm::ResumableResult<bool>
 Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurst(std::array<uint16_t, 11>& data)
 {
 	RF_BEGIN();
+
+	RF_CALL(spi.disable());
 
 	buffer.fill(0);
 	buffer[0] = 0x68;
@@ -260,6 +274,8 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurst(std::array<uint16_t, 11>& d
 		data[i] = modm::fromBigEndian(data[i]);
 	}
 
+	RF_CALL(spi.enable());
+
 	RF_END_RETURN(checksum == data[10]);
 }
 
@@ -272,9 +288,7 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::registerInterruptCallback(auto&& cb)
 	modm::platform::Exti::enableInterrupts<Int>();
 	modm::platform::Exti::connect<Int>(modm::platform::Exti::Trigger::RisingEdge, [&](uint8_t /*line*/) mutable {
 		if(intCallback){
-			__disable_irq();  // disable all interrupts
 			intCallback();
-			__enable_irq();   // enable all interrupts
 		}
 	});
 }

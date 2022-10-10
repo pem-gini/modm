@@ -124,6 +124,8 @@ public:
 	static bool
 	initialize();
 
+	static void enableInterrupts();
+
 private:
 	static bool
 	initializeWithPrescaler(uint8_t prescaler, uint8_t sjw, uint8_t prop_seg, uint8_t ps1,
