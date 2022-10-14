@@ -18,6 +18,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 #include <modm/architecture/utils.hpp>
 
@@ -92,6 +93,9 @@ namespace modm
 
 			void
 			pop();
+
+			bool 
+			copy(const T* src, size_t length);
 
 		private:
 			volatile Index head;

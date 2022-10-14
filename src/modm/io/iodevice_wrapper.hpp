@@ -54,6 +54,11 @@ public:
 		while(behavior == IOBuffer::BlockIfFull and not written);
 	}
 
+	bool
+	stream(const char* src, size_t length) override {
+		return Device::write(reinterpret_cast<const uint8_t*>(src), length);
+	}
+
 	void
 	flush() override
 	{
@@ -85,6 +90,11 @@ public:
 			written = device.write(uint8_t(c));
 		}
 		while(behavior == IOBuffer::BlockIfFull and not written);
+	}
+
+	bool
+	stream(const char* src, size_t length) override {
+		return Device::write(reinterpret_cast<const uint8_t*>(src), length);
 	}
 
 	void

@@ -122,4 +122,24 @@ modm::atomic::Queue<T, N>::pop()
 	this->tail = tmptail;
 }
 
+template<typename T, std::size_t N>
+bool 
+modm::atomic::Queue<T, N>::copy(const T* src, size_t length){
+	if(length > N){
+		return false;
+	}
+	if(length > N - getSize()){
+		return false;
+	}
+	Index tmphead = this->head;
+	T* ptr = &this->buffer[tmphead];
+	std::memcpy(ptr, src, length);
+	tmphead += length;
+	if (tmphead >= (N+1)) {
+		tmphead = 0;
+	}
+	this->head = tmphead;
+	return true;
+}
+
 #endif	// MODM_ATOMIC_QUEUE_IMPL_HPP
