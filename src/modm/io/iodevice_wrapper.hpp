@@ -56,7 +56,7 @@ public:
 
 	bool
 	stream(const char* src, size_t length) override {
-		return Device::write(reinterpret_cast<const uint8_t*>(src), length);
+		return Device::write(reinterpret_cast<const uint8_t*>(src), length) == length;
 	}
 
 	void
@@ -94,7 +94,7 @@ public:
 
 	bool
 	stream(const char* src, size_t length) override {
-		return Device::write(reinterpret_cast<const uint8_t*>(src), length);
+		return Device::write(reinterpret_cast<const uint8_t*>(src), length) == length;
 	}
 
 	void

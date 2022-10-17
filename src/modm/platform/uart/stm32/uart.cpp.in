@@ -96,19 +96,16 @@ std::size_t
 {
 %% if options["buffer.tx"]
 	bool copied = txBuffer.copy(data, length);
-	if(copied){
-		/// kickstart if necessary
-		if({{ hal }}::isTransmitRegisterEmpty()) {
-			// Disable interrupts while enabling the transmit interrupt
-			atomic::Lock lock;
-			// Transmit Data Register Empty Interrupt Enable
-			{{ hal }}::enableInterrupt(Interrupt::TxEmpty);
-			txBuffer.pop();
-			{{ hal }}::write(txBuffer.get());
-		}
-		return length;
+	if(!copied){
+		return 0;
 	}
-	return 0;
+	if({{ hal }}::isTransmitRegisterEmpty()) {
+		// Disable interrupts while enabling the transmit interrupt
+		atomic::Lock lock;
+		// Transmit Data Register Empty Interrupt Enable
+		{{ hal }}::enableInterrupt(Interrupt::TxEmpty);
+	}
+	return length;
 %% else
 	uint32_t i = 0;
 	for (; i < length; ++i)
