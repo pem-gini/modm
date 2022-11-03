@@ -96,6 +96,13 @@ template<modm::frequency_t externalClockFrequency, modm::bitrate_t bitrate,
 bool
 modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 {
+	/// kikass13
+	/// register interrupt before resetting the mcp, so if the mcp starts reading stuff after beeing reseted, the interrupt will not be lost
+	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
+		using namespace mcp2515;
+		mcp2515ReadMessage();
+	});
+	/// reset + initialize mcp
 	using Timings = modm::CanBitTimingMcp2515<externalClockFrequency, bitrate>;
 	bool init = initializeWithPrescaler(Timings::getPrescaler(), Timings::getSJW(), Timings::getProp(),
 								   Timings::getPS1(), Timings::getPS2());
@@ -105,10 +112,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::initialize()
 template<typename SPI, typename CS, typename INT>
 void
 modm::Mcp2515DmaInt<SPI, CS, INT>::enableInterrupts(){
-	modm::platform::Exti::connect<INT>(modm::platform::Exti::Trigger::FallingEdge, [&](uint8_t /*line*/) mutable {
-		using namespace mcp2515;
-		mcp2515ReadMessage();
-	});
+	/// enable interrupts now, pending interrupts will be triggered now
 	modm::platform::Exti::enableInterrupts<INT>();
 }
 
