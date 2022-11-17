@@ -107,11 +107,15 @@ public:
 
 		SpiExecutionEntry e;
 		/// call begin on first element last
-		e.push(transferBegin(std::move(first)));
-		/// call next on all other elements
-		std::apply([&e](auto&&... step){
-			((e.push(transferNext(step))), ...);
+		auto firstTransferStep = std::make_tuple(transferBegin(std::move(first)));
+		auto nextTransferSteps = std::apply([&e](auto&... step){
+			return std::make_tuple(transferNext(step) ...);
 		}, std::tie(steps...));
+		auto transferSteps = std::tuple_cat(firstTransferStep, nextTransferSteps);
+		/// call push for all elements
+		std::apply([&e](auto&... step){
+			((e.push(step)), ...);
+		}, transferSteps);
 
 		/// add these to execution queue
 		pushExec(e);
