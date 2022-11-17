@@ -94,6 +94,19 @@ bool
 std::size_t
 {{ name }}::write(const uint8_t *data, std::size_t length)
 {
+%% if options["buffer.tx"]
+	bool copied = txBuffer.copy(data, length);
+	if(!copied){
+		return 0;
+	}
+	if({{ hal }}::isTransmitRegisterEmpty()) {
+		// Disable interrupts while enabling the transmit interrupt
+		atomic::Lock lock;
+		// Transmit Data Register Empty Interrupt Enable
+		{{ hal }}::enableInterrupt(Interrupt::TxEmpty);
+	}
+	return length;
+%% else
 	uint32_t i = 0;
 	for (; i < length; ++i)
 	{
@@ -102,6 +115,7 @@ std::size_t
 		}
 	}
 	return i;
+%% endif
 }
 
 bool

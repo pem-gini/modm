@@ -11,14 +11,13 @@
  */
 // ----------------------------------------------------------------------------
 
-#ifndef	MODM_ATOMIC_QUEUE_IMPL_HPP
-#define	MODM_ATOMIC_QUEUE_IMPL_HPP
+#ifndef MODM_ATOMIC_QUEUE_IMPL_HPP
+#define MODM_ATOMIC_QUEUE_IMPL_HPP
 
 #include <modm/architecture/detect.hpp>
 
 template<typename T, std::size_t N>
-modm::atomic::Queue<T, N>::Queue() :
-	head(0), tail(0)
+modm::atomic::Queue<T, N>::Queue() : head(0), tail(0)
 {
 #if defined(MODM_CPU_AVR)
 	static_assert(N <= 254, "A maximum of 254 elements is allowed for AVRs!");
@@ -30,9 +29,7 @@ bool
 modm::atomic::Queue<T, N>::isFull() const
 {
 	Index tmphead = this->head + 1;
-	if (tmphead >= (N+1)) {
-		tmphead = 0;
-	}
+	if (tmphead >= (N + 1)) { tmphead = 0; }
 
 	return (tmphead == this->tail);
 }
@@ -60,7 +57,6 @@ modm::atomic::Queue<T, N>::isNearlyEmpty() const
 	return (getSize() < 3);
 }
 
-
 template<typename T, std::size_t N>
 typename modm::atomic::Queue<T, N>::Size
 modm::atomic::Queue<T, N>::getMaxSize() const
@@ -76,10 +72,11 @@ modm::atomic::Queue<T, N>::getSize() const
 	Index tmptail = this->tail;
 
 	Index stored;
-	if (tmphead >= tmptail) {
+	if (tmphead >= tmptail)
+	{
 		stored = tmphead - tmptail;
-	}
-	else {
+	} else
+	{
 		stored = (N + 1) - tmptail + tmphead;
 	}
 
@@ -98,13 +95,12 @@ bool
 modm::atomic::Queue<T, N>::push(const T& value)
 {
 	Index tmphead = this->head + 1;
-	if (tmphead >= (N+1)) {
-		tmphead = 0;
-	}
-	if (tmphead == this->tail) {
+	if (tmphead >= (N + 1)) { tmphead = 0; }
+	if (tmphead == this->tail)
+	{
 		return false;
-	}
-	else {
+	} else
+	{
 		this->buffer[this->head] = value;
 		this->head = tmphead;
 		return true;
@@ -116,10 +112,31 @@ void
 modm::atomic::Queue<T, N>::pop()
 {
 	Index tmptail = this->tail + 1;
-	if (tmptail >= (N+1)) {
-		tmptail = 0;
-	}
+	if (tmptail >= (N + 1)) { tmptail = 0; }
 	this->tail = tmptail;
 }
 
-#endif	// MODM_ATOMIC_QUEUE_IMPL_HPP
+template<typename T, std::size_t N>
+bool
+modm::atomic::Queue<T, N>::copy(const T* src, size_t length)
+{
+	if (length > N) { return false; }
+	if (length > N - getSize()) { return false; }
+	if ((this->head + length) > N)
+	{
+		size_t s1 = N - this->head;
+		size_t s2 = length - s1;
+		const T* src_mid = src + s1;
+		std::memcpy(&this->buffer[this->head], src, s1);
+		std::memcpy(&this->buffer[0], src_mid, s2);
+	} else
+	{
+		std::memcpy(&this->buffer[this->head], src, length);
+	}
+	Index tmphead = this->head + length;
+	if (tmphead >= (N + 1)) { tmphead = tmphead - N; }
+	this->head = tmphead;
+	return true;
+}
+
+#endif  // MODM_ATOMIC_QUEUE_IMPL_HPP
