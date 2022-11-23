@@ -65,8 +65,10 @@ class Instance(Module):
 
         env.template("uart_hal.hpp.in", "{}_hal_{}.hpp".format(uart, self.instance))
         env.template("uart_hal_impl.hpp.in", "{}_hal_{}_impl.hpp".format(uart, self.instance))
-        env.template("uart.hpp.in", "{}_{}.hpp".format(uart, self.instance))
-        env.template("uart.cpp.in", "{}_{}.cpp".format(uart, self.instance))
+        # env.template("uart.hpp.in", "{}_{}.hpp".format(uart, self.instance))
+        # env.template("uart.cpp.in", "{}_{}.cpp".format(uart, self.instance))
+        env.template("uart_dma.hpp.in", "{}_dma_{}.hpp".format(uart, self.instance))
+        env.template("uart_dma_impl.hpp.in", "{}_dma_{}_impl.hpp".format(uart, self.instance))
 
         #props["instances"].append(props["name"])
         if props["buffered"]:
