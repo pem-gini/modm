@@ -15,10 +15,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 // ----------------------------------------------------------------------------
+#pragma once
 
 #include "../device.hpp"
-
-using namespace modm::platform;
 
 template<typename DmaChannelRx, typename DmaChannelTx>
 void
@@ -212,6 +211,18 @@ MODM_ISR({{ name | upper }})
 %% endif
 {
 	using namespace modm::platform;
+
+	auto isr { Co{{ hal }}::getInterruptFlags() };
+	if(irq & ({{ hal }}::InterruptFlag::Idle)){
+		// idle interrupt flag set
+		if({{ name }}DataReceivedCallback.is_valid()){
+			if({{ name }}_get_dma_channel_ndtr.is_valid()){
+				auto dmaBytesWritten = {{ name }}_get_dma_channel_ndtr();
+				{{ name }}DataReceivedCallback(dmaBytesWritten);
+			}
+		}
+	}
+
 %% if options["buffer.tx"]
 	if ({{ hal }}::isTransmitRegisterEmpty()) {
 		if ({{ name }}txBuffer.isEmpty()) {

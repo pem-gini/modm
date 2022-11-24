@@ -235,6 +235,16 @@ public:
 		}
 
 		/**
+		 * Get length of data transfered
+		 */
+		static size_t
+		getDataLength()
+		{
+			return ChannelHal::getDataLength();
+		}
+
+
+		/**
 		 * Set the IRQ handler for transfer errors
 		 *
 		 * The handler will be called from the channels IRQ handler function
