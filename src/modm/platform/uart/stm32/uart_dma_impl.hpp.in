@@ -15,10 +15,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 // ----------------------------------------------------------------------------
+#pragma once
 
 #include "../device.hpp"
-
-using namespace modm::platform;
 
 template<typename DmaChannelRx, typename DmaChannelTx>
 void
@@ -180,29 +179,6 @@ void
 		{{ hal }}::InterruptFlag::OverrunError | {{ hal }}::InterruptFlag::FramingError);
 }
 
-
-
-
-template <class DmaChannelRx, class DmaChannelTx>
-void
-{{ name }}_dma<DmaChannelRx, DmaChannelTx>::handleDmaReceiveComplete()
-{
-	Dma::RxChannel::stop();
-	dmaReceiveComplete = true;
-}
-
-template <class DmaChannelRx, class DmaChannelTx>
-void
-{{ name }}_dma<DmaChannelRx, DmaChannelTx>::handleDmaTransmitComplete()
-{
-	Dma::TxChannel::stop();
-	dmaTransmitComplete = true;
-}
-
-
-
-
-
 %% if buffered
 %% if name in shared_irqs.keys()
 void
@@ -212,6 +188,28 @@ MODM_ISR({{ name | upper }})
 %% endif
 {
 	using namespace modm::platform;
+
+	auto irq { {{ hal }}::getInterruptFlags() };
+	if(irq & ({{ hal }}::InterruptFlag::Idle)){
+		// idle interrupt flag set
+		if({{ name }}DataReceivedCallback.is_valid()){
+			if({{ name }}_get_dma_channel_ndtr.is_valid()){
+				auto dmaBytesLeftInBuf = {{ name }}_get_dma_channel_ndtr();
+				size_t r = {{ name }}rxBuffer.getReadIndex();
+				size_t w = {{ name }}rxBuffer.maxSize() - dmaBytesLeftInBuf;
+				size_t bytesWritten = 0;
+				if(w < r){
+					bytesWritten = {{ name }}rxBuffer.maxSize() - r + w;
+				}
+				else{
+					bytesWritten = w - r;
+				}
+				{{ name }}DataReceivedCallback({{ name }}rxBuffer, bytesWritten);
+			}
+		}
+		{{ hal }}::acknowledgeInterruptFlags({{ hal }}::InterruptFlag::Idle);
+	}
+
 %% if options["buffer.tx"]
 	if ({{ hal }}::isTransmitRegisterEmpty()) {
 		if ({{ name }}txBuffer.isEmpty()) {

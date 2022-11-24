@@ -307,6 +307,21 @@ public:
 	}
 
 	/**
+	 * Get length of data transfered
+	 */
+	static size_t
+	getDataLength()
+	{
+		DMA_Channel_TypeDef *Base = (DMA_Channel_TypeDef *) CHANNEL_BASE;
+%% if dmaType in ["stm32-channel-request", "stm32-channel", "stm32-mux"]
+		return Base->CNDTR;
+%% elif dmaType in ["stm32-stream-channel", "stm32-mux-stream"]
+		return Base->NDTR;
+%% endif
+	}
+
+
+	/**
 	 * Enable IRQ of this DMA channel (e.g. transfer complete or error)
 	 */
 	static void

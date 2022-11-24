@@ -10,6 +10,7 @@ namespace atomic
 
 template <class T, size_t SIZE> class DmaRxRingBuffer {
 public:
+  static constexpr size_t maxSize(){ return SIZE; }
   T &front() { return buf.at(tail); }
   void pop() {
     if (tail == SIZE - 1) {
@@ -18,6 +19,12 @@ public:
       tail++;
     }
   }
+  
+  T at(auto index) const {
+    return buf.at(index);
+  }
+  size_t getReadIndex() const { return tail; }
+  const T* data() const { return buf.data(); }
   bool read(T *target, size_t length) {
     if (length > SIZE) {
       return false;
@@ -38,6 +45,7 @@ public:
     tail = tmptail;
     return true;
   }
+  private:
   std::array<T, SIZE> buf;
   T tail = 0;
 };

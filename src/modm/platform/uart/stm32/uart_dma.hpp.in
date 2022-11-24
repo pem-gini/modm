@@ -30,7 +30,7 @@
 #include <modm/architecture/driver/atomic/dma_ringbuffer.hpp>
 
 #include <modm/platform/dma/dma.hpp>
-
+#include <etl/delegate.h>
 
 namespace modm::platform
 {
@@ -48,6 +48,8 @@ static modm::atomic::DmaRxRingBuffer<uint8_t, {{ options["buffer.rx"] }}> {{ nam
 	static modm::atomic::Queue<uint8_t, {{ options["buffer.tx"] }}> {{ name }}txBuffer;
 %% endif
 
+static etl::delegate<void(const decltype({{ name }}rxBuffer)&, size_t)>  {{ name }}DataReceivedCallback = {};
+static etl::delegate<size_t()> {{ name }}_get_dma_channel_ndtr;
 
 template <class DmaChannelRx, class DmaChannelTx>
 class {{ name }}_dma : public UartBase, public ::modm::Uart
@@ -59,15 +61,15 @@ public:
 	static constexpr size_t TxBufferSize = {{ options["buffer.tx"] }};
 
     struct Dma {
-		using RxChannel = typename DmaChannelRx::template RequestMapping<
-				Peripheral::{{ name }}, DmaBase::Signal::Rx>::Channel;
-		// using TxChannel = typename DmaChannelTx::template RequestMapping<
-		// 		Peripheral::{{ name }}, DmaBase::Signal::Tx>::Channel;
-		static constexpr DmaBase::Request RxRequest = DmaChannelRx::template RequestMapping<
-				Peripheral::{{ name }}, DmaBase::Signal::Rx>::Request;
-		// static constexpr DmaBase::Request TxRequest = DmaChannelTx::template RequestMapping<
-		// 		Peripheral::{{ name }}, DmaBase::Signal::Tx>::Request;
-	};
+        using RxChannel = typename DmaChannelRx::template RequestMapping<
+                Peripheral::{{ name }}, DmaBase::Signal::Rx>::Channel;
+        // using TxChannel = typename DmaChannelTx::template RequestMapping<
+        // 		Peripheral::{{ name }}, DmaBase::Signal::Tx>::Channel;
+        static constexpr DmaBase::Request RxRequest = DmaChannelRx::template RequestMapping<
+                Peripheral::{{ name }}, DmaBase::Signal::Rx>::Request;
+        // static constexpr DmaBase::Request TxRequest = DmaChannelTx::template RequestMapping<
+        // 		Peripheral::{{ name }}, DmaBase::Signal::Tx>::Request;
+    };
 
 public:
 	template< class... Signals >
@@ -93,26 +95,38 @@ public:
 	static inline void
 	initialize(Parity parity=Parity::Disabled, WordLength length=WordLength::Bit8)
 	{
-          // Configure the DMA channels, then calls SpiMaster{{ id }}::initialzie().
+		{{ hal }}::initialize<SystemClock, baudrate, tolerance>(parity, length);
+		{{ hal }}::disableOperation();
+		{{ hal }}::enableInterruptVector(true, 12);
+		{{ hal }}::enableInterrupt(/*Interrupt::RxNotEmpty |*/ Interrupt::Idle); /// possibly idle interrupt enable?
+		/// enable dma receiver mode
+		{{ hal }}::setTransmitterEnable(true);
+		{{ hal }}::setReceiverEnable(true);
+		{{ peripheral }}->CR3 |= USART_CR3_DMAR; // for tx set USART_CR3_DMAT;
+		{{ hal }}::enableOperation();
+
+        // Configure the DMA channels, then calls SpiMaster{{ id }}::initialzie().
         Dma::RxChannel::configure(DmaBase::DataTransferDirection::PeripheralToMemory,
                 DmaBase::MemoryDataSize::Byte, DmaBase::PeripheralDataSize::Byte,
                 DmaBase::MemoryIncrementMode::Increment, DmaBase::PeripheralIncrementMode::Fixed,
-                DmaBase::Priority::High);
-        Dma::RxChannel::setPeripheralAddress({{ peripheral }}->DR);
-        // Dma::RxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
-        Dma::RxChannel::setTransferCompleteIrqHandler(handleDmaReceiveComplete);
-        Dma::RxChannel::enableInterruptVector();
-        Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
-                DmaBase::InterruptEnable::TransferComplete);
+                DmaBase::Priority::High, DmaBase::CircularMode::Enabled);
         Dma::RxChannel::template setPeripheralRequest<Dma::RxRequest>();
+        Dma::RxChannel::setPeripheralAddress(reinterpret_cast<unsigned int>(&{{ peripheral }}->DR));
+        // Dma::RxChannel::setPeripheralAddress({{ peripheral }}_BASE + 0x04);
+        Dma::RxChannel::setMemoryAddress(reinterpret_cast<unsigned int>({{ name }}rxBuffer.data()));
+        Dma::RxChannel::setDataLength({{ name }}rxBuffer.maxSize());
 
-		{{ hal }}::initialize<SystemClock, baudrate, tolerance>(parity, length);
-		{{ hal }}::enableInterruptVector(true, 12);
-		// {{ hal }}::enableInterrupt(Interrupt::RxNotEmpty);
-		{{ hal }}::setTransmitterEnable(true);
-		// {{ hal }}::setReceiverEnable(true);
-		{{ hal }}::enableOperation();
-	}
+        /// register global ndtr get function
+        {{ name }}_get_dma_channel_ndtr = [&](){return Dma::RxChannel::getDataLength(); };
+
+	  	/* Clear the Overrun flag just before enabling the DMA Rx request: can be mandatory for the second transfer */
+		{{ hal }}::acknowledgeInterruptFlags({{ hal }}::InterruptFlag::OverrunError);
+
+		Dma::RxChannel::enableInterruptVector();
+		// Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError | DmaBase::InterruptEnable::TransferComplete);
+
+        Dma::RxChannel::start();
+    }
 
 	static void
 	writeBlocking(uint8_t data);
@@ -156,19 +170,16 @@ public:
 	static void
 	clearError();
 
+    static void registerDataReceivedCallback(auto f){
+        {{ name }}DataReceivedCallback = f;
+    }
+
 %% if name in shared_irqs.keys()
 	static void
 	irq();
 %% endif
 
-	static void
-	handleDmaReceiveComplete();
-	static void
-	handleDmaTransmitComplete();
-
 	static inline bool dmaError { false };
-	static inline bool dmaTransmitComplete { false };
-	static inline bool dmaReceiveComplete { false };
 };
 
 #include "uart_dma_{{ id }}_impl.hpp"
