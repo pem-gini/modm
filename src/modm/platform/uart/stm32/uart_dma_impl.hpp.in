@@ -192,19 +192,12 @@ MODM_ISR({{ name | upper }})
 	auto irq { {{ hal }}::getInterruptFlags() };
 	if(irq & ({{ hal }}::InterruptFlag::Idle)){
 		// idle interrupt flag set
-		if({{ name }}DataReceivedCallback.is_valid()){
-			if({{ name }}_get_dma_channel_ndtr.is_valid()){
+		if({{ name }}DataReceivedCallback != nullptr){
+			if({{ name }}_get_dma_channel_ndtr != nullptr){
 				auto dmaBytesLeftInBuf = {{ name }}_get_dma_channel_ndtr();
-				size_t r = {{ name }}rxBuffer.getReadIndex();
 				size_t w = {{ name }}rxBuffer.maxSize() - dmaBytesLeftInBuf;
-				size_t bytesWritten = 0;
-				if(w < r){
-					bytesWritten = {{ name }}rxBuffer.maxSize() - r + w;
-				}
-				else{
-					bytesWritten = w - r;
-				}
-				{{ name }}DataReceivedCallback({{ name }}rxBuffer, bytesWritten);
+				modm::atomic::DmaRingBuffer* buf = reinterpret_cast<modm::atomic::DmaRingBuffer*>(&{{ name }}rxBuffer);
+				{{ name }}DataReceivedCallback(buf, w);
 			}
 		}
 		{{ hal }}::acknowledgeInterruptFlags({{ hal }}::InterruptFlag::Idle);
