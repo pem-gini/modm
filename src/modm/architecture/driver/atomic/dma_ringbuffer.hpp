@@ -65,7 +65,7 @@ public:
 			std::memcpy(target, &buf.at(tail), length);
 		}
 		auto tmptail = tail + length;
-		if (tmptail >= (SIZE + 1)) { tmptail = tmptail - SIZE; }
+		if (tmptail >= (SIZE)) { tmptail = tmptail - SIZE; }
 		tail = tmptail;
 		return true;
 	}
@@ -86,7 +86,7 @@ public:
 
 private:
 	std::array<uint8_t, SIZE> buf;
-	T tail = 0;
+	size_t tail = 0;
 };
 
 }  // namespace atomic
