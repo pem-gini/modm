@@ -8,25 +8,8 @@ namespace modm
 namespace atomic
 {
 
-class DmaRingBuffer
-{
-public:
-	virtual size_t
-	maxSize() = 0;
-	virtual uint8_t
-	at(size_t index) const = 0;
-	virtual size_t
-	getIndex() const = 0;
-	virtual const uint8_t*
-	data() const = 0;
-	virtual bool
-	read(uint8_t* target, size_t length) = 0;
-	virtual size_t
-	getBytesWritten(size_t writeIndex) = 0;
-};
-
 template<class T, size_t SIZE>
-class DmaRxRingBuffer : public DmaRingBuffer
+class DmaRxRingBuffer
 {
 public:
 	size_t

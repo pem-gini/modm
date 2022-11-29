@@ -196,8 +196,7 @@ MODM_ISR({{ name | upper }})
 			if({{ name }}_get_dma_channel_ndtr != nullptr){
 				auto dmaBytesLeftInBuf = {{ name }}_get_dma_channel_ndtr();
 				size_t w = {{ name }}rxBuffer.maxSize() - dmaBytesLeftInBuf;
-				modm::atomic::DmaRingBuffer* buf = reinterpret_cast<modm::atomic::DmaRingBuffer*>(&{{ name }}rxBuffer);
-				{{ name }}DataReceivedCallback(buf, w);
+				{{ name }}DataReceivedCallback(w);
 			}
 		}
 		{{ hal }}::acknowledgeInterruptFlags({{ hal }}::InterruptFlag::Idle);

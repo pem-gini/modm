@@ -43,12 +43,13 @@ namespace modm::platform
  * @ingroup		modm_platform_uart modm_platform_uart_{{id}}
  */
 
-static modm::atomic::DmaRxRingBuffer<uint8_t, {{ options["buffer.rx"] }}> {{ name }}rxBuffer;
+using DmaRxBufferType = modm::atomic::DmaRxRingBuffer<uint8_t, {{ options["buffer.rx"] }}>;
+static DmaRxBufferType {{ name }}rxBuffer;
 %% if options["buffer.tx"]
 	static modm::atomic::Queue<uint8_t, {{ options["buffer.tx"] }}> {{ name }}txBuffer;
 %% endif
 
-static std::function<void(modm::atomic::DmaRingBuffer*, size_t)>  {{ name }}DataReceivedCallback = {};
+static std::function<void(size_t)>  {{ name }}DataReceivedCallback = {};
 static std::function<size_t()> {{ name }}_get_dma_channel_ndtr;
 
 template <class DmaChannelRx, class DmaChannelTx>
@@ -170,9 +171,13 @@ public:
 	static void
 	clearError();
 
-    static void registerDataReceivedCallback(auto f){
+    static constexpr void registerDataReceivedCallback(auto f){
         {{ name }}DataReceivedCallback = f;
     }
+
+	static constexpr DmaRxBufferType& getRxBuffer(){
+		return {{ name }}rxBuffer;
+	}
 
 %% if name in shared_irqs.keys()
 	static void
