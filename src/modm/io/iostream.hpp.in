@@ -56,6 +56,10 @@ public:
 	write(char c)
 	{ device->write(c); return *this; }
 
+	inline bool
+	stream(const char* src, size_t length)
+	{ return device->stream(src, length); }
+	
 	static constexpr char eof = -1;
 
 	/// Reads one character and returns it if available. Otherwise, returns IOStream::eof.

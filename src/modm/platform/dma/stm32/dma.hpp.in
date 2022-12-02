@@ -235,6 +235,16 @@ public:
 		}
 
 		/**
+		 * Get length of data transfered
+		 */
+		static size_t
+		getDataLength()
+		{
+			return ChannelHal::getDataLength();
+		}
+
+
+		/**
 		 * Set the IRQ handler for transfer errors
 		 *
 		 * The handler will be called from the channels IRQ handler function
@@ -317,6 +327,7 @@ public:
 %% endif
 
 			auto isr { ControlHal::getInterruptFlags() };
+			ControlHal::clearInterruptFlags(InterruptFlags::Global, ChannelID);
 			if (isr & TE_Flag) {
 				disable();
 				if (transferError)
@@ -325,7 +336,7 @@ public:
 			if ((isr & TC_Flag) and transferComplete)
 				transferComplete();
 
-			ControlHal::clearInterruptFlags(InterruptFlags::Global, ChannelID);
+			
 		}
 
 		/**
@@ -339,6 +350,23 @@ public:
 			NVIC_SetPriority(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)], priority);
 			NVIC_EnableIRQ(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)]);
 		}
+
+		/**
+		 * set the IRQ  priority value with a given priority group to
+           preemptive priority value and subpriority value. of the channel
+		 *
+		 * \param [in]     PriorityGroup  Used priority group.
+ 		 * \param [in]   PreemptPriority  Preemptive priority value (starting from 0).
+ 		 * \param [in]       SubPriority  Subpriority value (starting from 0).
+		 */
+		static void
+		setInterruptPriorityWithPreemptive(uint32_t PriorityGroup = 0, uint32_t PreemptPriority = 0, uint32_t SubPriority = 1)
+		{
+			uint32_t val = NVIC_EncodePriority(PriorityGroup, PreemptPriority, SubPriority);
+			NVIC_SetPriority(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)], val);
+			NVIC_EnableIRQ(DmaBase::Nvic<ID>::DmaIrqs[uint32_t(ChannelID)]);
+		}
+
 		/**
 		 * Disable the IRQ vector of the channel
 		 */

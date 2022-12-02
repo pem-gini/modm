@@ -15,7 +15,6 @@ def init(module):
     module.name = ":driver:mcp2515"
     module.description = "MPC2515 External CAN Controller"
 
-
 def prepare(module, options):
     module.add_option(
         EnumerationOption(
@@ -41,8 +40,8 @@ def prepare(module, options):
         NumericOption(
             name="spi.buffer",
             description="",
-            minimum=1, maximum=2 ** 16 - 2,
-            default=32))
+            minimum=64, maximum=2 ** 16 - 2,
+            default=64))
     module.depends(
         ":architecture:accessor",
         ":architecture:assert",
@@ -52,13 +51,17 @@ def prepare(module, options):
         ":architecture:spi.device",
         ":processing:protothread",
         ":processing:timer",
-        ":debug")
+        ":platform:exti",
+        ":debug",
+    )
     return True
 
 def build(env):
     env.outbasepath = "modm/src/modm/driver/can"
     env.copy("mcp2515.hpp")
     env.copy("mcp2515_impl.hpp")
+    env.copy("mcp2515_dmaint.hpp")
+    env.copy("mcp2515_dmaint_impl.hpp")
     env.copy("mcp2515_bit_timings.hpp")
     env.copy("mcp2515_definitions.hpp")
     env.template("mcp2515.cpp.in")

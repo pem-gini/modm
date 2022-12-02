@@ -143,3 +143,13 @@ modm::platform::SpiMaster{{ id }}::transfer(
 			return {modm::rf::Stop};
 	}
 }
+
+modm::ResumableResult<void>
+modm::platform::SpiMaster{{ id }}::transfer(
+		const uint8_t * tx, uint8_t * rx, std::size_t length, modm::platform::SpiMaster{{ id }}::SpiTransferCallback cb)
+{
+	/// default: ignore cb
+	(void) cb;
+	return transfer(tx, rx,length);
+}
+

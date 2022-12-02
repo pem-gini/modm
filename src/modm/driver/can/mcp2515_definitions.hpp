@@ -15,6 +15,10 @@
 #ifndef	MODM_MCP2515_DEFINITIONS_HPP
 #define	MODM_MCP2515_DEFINITIONS_HPP
 
+//#include <cstdint>
+
+//using namespace std;
+
 namespace modm
 {
 	namespace mcp2515

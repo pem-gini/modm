@@ -68,6 +68,9 @@ public:
 		TxComplete	= USART_CR1_TCIE,
 		/// Call interrupt when char received (RXNE) or overrun occurred (ORE)
 		RxNotEmpty	= USART_CR1_RXNEIE,
+		/// kikass13:
+		/// possibly idle interrupt?
+		Idle = USART_CR1_IDLEIE,
 	};
 	MODM_FLAGS32(Interrupt);
 
@@ -97,6 +100,8 @@ public:
 		FramingError 	= USART_{{reg}}_FE,
 		/// Set if a parity error was detected.
 		ParityError		= USART_{{reg}}_PE,
+		/// Set if a idle line was deteted.
+		Idle		= USART_{{reg}}_IDLE,
 	};
 	MODM_FLAGS32(InterruptFlag);
 

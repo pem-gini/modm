@@ -70,6 +70,23 @@ def build(env):
     env.outbasepath = "modm/ext/etl"
     env.substitutions = {"with_freertos": env.has_module(":freertos")}
 
+    ### kikass13: HACK
+    ### change a single code line in etl
+    import os
+    currDir = os.path.dirname(os.path.abspath(__file__))
+    lines = []
+    original = []
+    filePath = os.path.join(currDir,"etl/include/etl/","set.h")
+    with open(filePath, "r") as f:
+        original = f.readlines()
+    ### remove line x
+    lines = list(original)
+    lines[2533] = ""
+    ### rewrite file
+    with open(filePath, "w") as f:
+        for line in lines:
+            f.write(line)
+
     # Ignore the preconfigured profiles (but keep determine_ headers)
     env.copy("etl/include/etl/", dest="etl/", ignore=env.ignore_paths(
              "*/etl/include/etl/profiles/[a-ce-z]*", "*/doxygen.h",
@@ -80,3 +97,11 @@ def build(env):
     # So that we can replace them with ours but not need to reproduce them
     env.copy("error_handler.h", dest="etl/error_handler.h")
     env.template("platform.h.in", dest="etl/platform.h")
+
+
+    ### kikass13:
+    ### reset original state
+    with open(filePath, "w") as f:
+        for line in original:
+            f.write(line)
+

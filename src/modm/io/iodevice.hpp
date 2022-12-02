@@ -41,6 +41,9 @@ public:
 		while ( (c = *str++) ) write(c);
 	}
 
+	virtual bool 
+	stream(const char* src, size_t length) = 0;
+
 	virtual void
 	flush() = 0;
 

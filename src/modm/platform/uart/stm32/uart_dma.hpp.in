@@ -1,0 +1,194 @@
+/*
+ * Copyright (c) 2009-2012, Fabian Greif
+ * Copyright (c) 2010, Martin Rosekeit
+ * Copyright (c) 2011, Georgi Grinshpun
+ * Copyright (c) 2011, 2013-2017, Niklas Hauser
+ * Copyright (c) 2012, Sascha Schade
+ * Copyright (c) 2013, 2016, Kevin Läufer
+ * Copyright (c) 2021, Raphael Lehmann
+ *
+ * This file is part of the modm project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+// ----------------------------------------------------------------------------
+
+%% set peripheral = uart_type | upper ~ id
+
+#ifndef MODM_STM32_UART_{{ id }}_DMA_HPP
+#define MODM_STM32_UART_{{ id }}_DMA_HPP
+
+#include <modm/architecture/interface/uart.hpp>
+#include <modm/platform/gpio/connector.hpp>
+#include "uart_base.hpp"
+#include "uart_hal_{{ id }}.hpp"
+
+#include <modm/architecture/interface/atomic_lock.hpp>
+#include <modm/architecture/driver/atomic/queue.hpp>
+#include <modm/architecture/driver/atomic/dma_ringbuffer.hpp>
+
+#include <modm/platform/dma/dma.hpp>
+#include <functional>
+
+namespace modm::platform
+{
+
+/**
+ * Universal asynchronous receiver transmitter ({{ name }})
+ *
+ * @author		Kevin Laeufer
+ * @author		Niklas Hauser
+ * @ingroup		modm_platform_uart modm_platform_uart_{{id}}
+ */
+
+using DmaRxBufferType = modm::atomic::DmaRxRingBuffer<uint8_t, {{ options["buffer.rx"] }}>;
+static DmaRxBufferType {{ name }}rxBuffer;
+%% if options["buffer.tx"]
+	static modm::atomic::Queue<uint8_t, {{ options["buffer.tx"] }}> {{ name }}txBuffer;
+%% endif
+
+static std::function<void(size_t)>  {{ name }}DataReceivedCallback = {};
+static std::function<size_t()> {{ name }}_get_dma_channel_ndtr;
+
+template <class DmaChannelRx, class DmaChannelTx>
+class {{ name }}_dma : public UartBase, public ::modm::Uart
+{
+public:
+	using Hal = {{ hal }};
+	// Expose jinja template parameters to be checked by e.g. drivers or application
+	static constexpr size_t RxBufferSize = {{ options["buffer.rx"] }};
+	static constexpr size_t TxBufferSize = {{ options["buffer.tx"] }};
+
+    struct Dma {
+        using RxChannel = typename DmaChannelRx::template RequestMapping<
+                Peripheral::{{ name }}, DmaBase::Signal::Rx>::Channel;
+        // using TxChannel = typename DmaChannelTx::template RequestMapping<
+        // 		Peripheral::{{ name }}, DmaBase::Signal::Tx>::Channel;
+        static constexpr DmaBase::Request RxRequest = DmaChannelRx::template RequestMapping<
+                Peripheral::{{ name }}, DmaBase::Signal::Rx>::Request;
+        // static constexpr DmaBase::Request TxRequest = DmaChannelTx::template RequestMapping<
+        // 		Peripheral::{{ name }}, DmaBase::Signal::Tx>::Request;
+    };
+
+public:
+	template< class... Signals >
+	static void
+	connect(Gpio::InputType InputTypeRx = Gpio::InputType::PullUp,
+	        Gpio::OutputType OutputTypeTx = Gpio::OutputType::PushPull)
+	{
+		using Connector = GpioConnector<Peripheral::{{ name }}, Signals...>;
+		using Tx = typename Connector::template GetSignal< Gpio::Signal::Tx >;
+		using Rx = typename Connector::template GetSignal< Gpio::Signal::Rx >;
+		static_assert(((Connector::template IsValid<Tx> and Connector::template IsValid<Rx>) and sizeof...(Signals) == 2) or
+					  ((Connector::template IsValid<Tx> or  Connector::template IsValid<Rx>) and sizeof...(Signals) == 1),
+					  "{{ name }}::connect() requires one Tx and/or one Rx signal!");
+
+		// Connector::disconnect();
+		Tx::setOutput(OutputTypeTx);
+		Rx::setInput(InputTypeRx);
+		Connector::connect();
+	}
+
+	/// @warning Remember to set word length correctly when using the parity bit!
+	template< class SystemClock, baudrate_t baudrate, percent_t tolerance=pct(1) >
+	static inline void
+	initialize(Parity parity=Parity::Disabled, WordLength length=WordLength::Bit8)
+	{
+		  // Configure the DMA channels, then calls SpiMaster{{ id }}::initialzie().
+        Dma::RxChannel::configure(DmaBase::DataTransferDirection::PeripheralToMemory,
+                DmaBase::MemoryDataSize::Byte, DmaBase::PeripheralDataSize::Byte,
+                DmaBase::MemoryIncrementMode::Increment, DmaBase::PeripheralIncrementMode::Fixed,
+                DmaBase::Priority::Low, DmaBase::CircularMode::Enabled);
+        Dma::RxChannel::template setPeripheralRequest<Dma::RxRequest>();
+        Dma::RxChannel::setPeripheralAddress(reinterpret_cast<unsigned int>(&{{ peripheral }}->DR));
+        Dma::RxChannel::setMemoryAddress(reinterpret_cast<unsigned int>({{ name }}rxBuffer.data()));
+        Dma::RxChannel::setDataLength({{ name }}rxBuffer.maxSize());
+
+        /// register global ndtr get function
+        {{ name }}_get_dma_channel_ndtr = [&](){return Dma::RxChannel::getDataLength(); };
+
+		Dma::RxChannel::enableInterruptVector();
+		// Dma::RxChannel::setTransferCompleteIrqHandler(handleDmaReceiveComplete);
+		// Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError | DmaBase::InterruptEnable::TransferComplete);
+
+        Dma::RxChannel::start();
+
+		{{ hal }}::initialize<SystemClock, baudrate, tolerance>(parity, length);
+		{{ hal }}::disableOperation();
+		{{ hal }}::enableInterruptVector(true, 12);
+		{{ hal }}::enableInterrupt(/*Interrupt::RxNotEmpty |*/ Interrupt::Idle); /// possibly idle interrupt enable?
+		/// enable dma receiver mode
+		{{ hal }}::setTransmitterEnable(true);
+		{{ hal }}::setReceiverEnable(true);
+		{{ peripheral }}->CR3 |= USART_CR3_DMAR; // for tx set USART_CR3_DMAT;
+		{{ hal }}::enableOperation();
+
+	  	/* Clear the Overrun flag just before enabling the DMA Rx request: can be mandatory for the second transfer */
+		{{ hal }}::acknowledgeInterruptFlags({{ hal }}::InterruptFlag::OverrunError);
+    }
+	
+	static void
+	writeBlocking(uint8_t data);
+
+	static void
+	writeBlocking(const uint8_t *data, std::size_t length);
+
+	static void
+	flushWriteBuffer();
+
+	static bool
+	write(uint8_t data);
+
+	static std::size_t
+	write(const uint8_t *data, std::size_t length);
+
+	static bool
+	isWriteFinished();
+
+	static std::size_t
+	transmitBufferSize();
+
+	static std::size_t
+	discardTransmitBuffer();
+
+	static bool
+	read(uint8_t &data);
+
+	static std::size_t
+	read(uint8_t *buffer, std::size_t length);
+
+	static std::size_t
+	receiveBufferSize();
+
+	static std::size_t
+	discardReceiveBuffer();
+
+	static bool
+	hasError();
+
+	static void
+	clearError();
+
+    static constexpr void registerDataReceivedCallback(auto f){
+        {{ name }}DataReceivedCallback = f;
+    }
+
+	static constexpr DmaRxBufferType& getRxBuffer(){
+		return {{ name }}rxBuffer;
+	}
+
+%% if name in shared_irqs.keys()
+	static void
+	irq();
+%% endif
+
+	static inline bool dmaError { false };
+};
+
+#include "uart_dma_{{ id }}_impl.hpp"
+
+}	// namespace modm::platform
+
+#endif // MODM_STM32_UART_{{ id }}_HPP

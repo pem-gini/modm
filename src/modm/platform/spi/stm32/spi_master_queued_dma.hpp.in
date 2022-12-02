@@ -1,0 +1,314 @@
+/*
+ * Copyright (c) 2020, Mike Wolfram
+ *
+ * This file is part of the modm project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+// ----------------------------------------------------------------------------
+
+#ifndef MODM_STM32_SPI_MASTER{{ id }}_QUEUED_DMA_HPP
+#define MODM_STM32_SPI_MASTER{{ id }}_QUEUED_DMA_HPP
+
+#include <modm/platform/dma/dma.hpp>
+#include "spi_master_{{ id }}.hpp"
+
+#include <tuple>
+
+#include <etl/list.h>
+#include <etl/queue.h>
+
+namespace modm
+{
+
+namespace platform
+{
+
+/**
+ * Serial peripheral interface (SPI{{ id }}) with DMA support.
+ *
+ * This class uses the DMA controller for sending and receiving data, which
+ * greatly reduces the CPU load. Beside passing the DMA channels as template
+ * parameters the class can be used in the same way like the SpiMaster{{ id }}.
+ *
+ * @tparam DmaChannelRX DMA channel for receiving
+ * @tparam DmaChannelTX DMA channel for sending
+ *
+ * @author	Mike Wolfram
+ * @ingroup	modm_platform_spi modm_platform_spi_{{id}}
+ */
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE = 32, size_t SPI_DATA_BUFFER_COUNT = 16, size_t SPI_DATA_BUFFER_LENGTH = 32>
+class SpiMaster{{ id }}QueuedDma : public SpiMaster{{ id }}
+{
+private:
+	using SpiTransferTask = etl::delegate<bool(const SpiTransferStep& s)>;
+	struct SpiTransferEntry{
+		SpiTransferTask task;
+		SpiTransferStep step = SpiTransferStep{};
+	};
+
+	static constexpr size_t MaxStepSize = 8;
+	using SpiExecutionEntry = etl::queue<SpiTransferEntry, MaxStepSize>;
+	using SpiTransferExecutionQueue = etl::queue<SpiExecutionEntry, QUEUE_SIZE>;
+	using SpiDataBuffer = std::array<uint8_t,SPI_DATA_BUFFER_LENGTH>;
+	using SpiDataQueue = std::array<SpiDataBuffer, SPI_DATA_BUFFER_COUNT>;
+
+	struct Dma {
+		using RxChannel = typename DmaChannelRx::template RequestMapping<
+				Peripheral::Spi{{ id }}, DmaBase::Signal::Rx>::Channel;
+		using TxChannel = typename DmaChannelTx::template RequestMapping<
+				Peripheral::Spi{{ id }}, DmaBase::Signal::Tx>::Channel;
+		static constexpr DmaBase::Request RxRequest = DmaChannelRx::template RequestMapping<
+				Peripheral::Spi{{ id }}, DmaBase::Signal::Rx>::Request;
+		static constexpr DmaBase::Request TxRequest = DmaChannelTx::template RequestMapping<
+				Peripheral::Spi{{ id }}, DmaBase::Signal::Tx>::Request;
+	};
+
+public:
+	/**
+	 * Initialize DMA and SPI{{ id }}
+	 */
+	template <class SystemClock, baudrate_t baudrate, percent_t tolerance=pct(5)>
+	static void
+	initialize();
+
+	/**kikass13:
+	* this function has no safety checks in place, when calling this, 
+	* make sure that there is nothing else runnign on the spi bus going on 
+	* and that the dma queue is not yet running
+	*/
+	static uint8_t
+	transferBlocking(uint8_t data, modm::SpiTransferConfiguration& configuration, 
+		modm::SpiTransferChipSelectBehavior&& csbehavior = modm::CsBehavior<void>());
+
+	/**kikass13:
+	* this function has no safety checks in place, when calling this, 
+	* make sure that there is nothing else runnign on the spi bus going on 
+	* and that the dma queue is not yet running
+	*/
+	static void
+	transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
+		modm::SpiTransferConfiguration& configuration, 
+		modm::SpiTransferChipSelectBehavior&& csbehavior = modm::CsBehavior<void>());
+
+	/** kikass13:
+	* Create a new dma pipeline which will be pushed ontothe task queue of this controller
+	* This function will return instantly, the given task will be performed later when the queue 
+	* gets automatically emptied
+	/*/
+	template <typename... Steps>
+	static constexpr void pipeline(SpiTransferStep&& first, Steps&&... steps){
+		/// Disable Interrupt to be Multithreading-Safe
+		uint32_t primask = __get_PRIMASK();
+		__disable_irq();
+
+		SpiExecutionEntry e;
+		/// call begin on first element last
+		auto firstTransferStep = std::make_tuple(transferBegin(std::move(first)));
+		auto nextTransferSteps = std::apply([&e](auto&... step){
+			return std::make_tuple(transferNext(step) ...);
+		}, std::tie(steps...));
+		auto transferSteps = std::tuple_cat(firstTransferStep, nextTransferSteps);
+		/// call push for all elements
+		std::apply([&e](auto&... step){
+			((e.push(step)), ...);
+		}, transferSteps);
+
+		/// add these to execution queue
+		pushExec(e);
+		/// kickstart queue
+		exec();
+
+		/// Enable Interrupts if enabled before
+		if (!primask) {
+    		__enable_irq();
+  		}
+	};
+
+	static constexpr bool hasSpaceFor(unsigned int n){
+		return QUEUE_SIZE - executionQueue.size() >= n;
+	}
+
+	/** kikass13:
+	* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
+	* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty
+	* this is a limitation of the the queue triggering itself after dma is finished, as there is no feasible way to let
+	* other functions intervene - as this would lead to further problems with the dma queue down the road (overflow)
+	* so these kind of calls (with this specific queued dma spi driver) will potentially have to wait a long time (infinitly) 
+	* until they are able to get their job done
+	*/
+	static modm::ResumableResult<uint8_t>
+	transfer(uint8_t data);
+
+	/** kikass13:
+	* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
+	* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty
+	* this is a limitation of the the queue triggering itself after dma is finished, as there is no feasible way to let
+	* other functions intervene - as this would lead to further problems with the dma queue down the road (overflow)
+	* so these kind of calls (with this specific queued dma spi driver) will potentially have to wait a long time (infinitly) 
+	* until they are able to get their job done
+	*/
+	static modm::ResumableResult<void>
+	transfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
+
+	modm::ResumableResult<void> disable(){
+		tryToDisable = true;
+		if(!executionQueue.empty() && enabled){
+			return modm::rf::Running;
+		}
+		return modm::rf::Stop;
+	}
+	/// wait for the queue to be idle and enable the queue , kickstart next transfer 
+	modm::ResumableResult<void> enable(){
+		if(state != 0){
+			return modm::rf::Running;
+		}
+		tryToDisable = false;
+		enabled = true;
+		exec();
+		return modm::rf::Stop;
+	}
+
+private: 
+	static constexpr auto transferBegin(SpiTransferStep&& step){
+		auto length = step.length();
+		if(length > SPI_DATA_BUFFER_LENGTH){
+			return SpiTransferEntry{};
+		}
+		uint8_t* buf = buffers.at(nextBuffer).data();
+		std::memcpy(buf, step.tx, length);
+		step.tx = buf;
+		nextBuffer++;
+		if(nextBuffer >= SPI_DATA_BUFFER_COUNT){
+			nextBuffer = 0;
+		}
+		return SpiTransferEntry{.task = createTask(), .step = step};
+	}
+
+	static constexpr auto transferNext(auto&& step) {
+		return SpiTransferEntry{.task = createTask(), .step = step };
+	}
+	static constexpr void transferNext(){}
+
+	static uint8_t transferBlockingSingleByte(uint8_t b);
+
+	/** kikass13:
+	* Basic spi transfer via dma will start a dma transfer with the given tx, rx length parameters
+	* This function is used directly by the dma queue as well as indiretly by the resumable transfer function
+	*/
+	static void 
+	basicTransfer(const uint8_t *tx, uint8_t *rx, std::size_t length);
+
+	static constexpr auto createTask(){
+		return [](const SpiTransferStep& step){
+			bool work = true;
+			if(step.condition){
+				work = step.condition();
+			}
+			if(work){			
+				size_t length = step.length();
+				/// check length
+				if (length == 0){
+					/// length irrelevant, do not do anything
+					work = false;
+				}
+				else{
+					/// we ha ve valid length
+					if(step.configuration.pre){
+						step.configuration.pre();
+					}
+					/// call cs pre behavor
+					step.cs.pre();
+					/// shall we really use dma ?
+					// if(length == 1){
+					// 	step.rx[0] = transferBlockingSingleByte(step.tx[0]);
+					// }else{
+					// 	transfer(step.tx, step.rx, length);
+					// }
+					/// just do the transfer, even with length = 1
+					basicTransfer(step.tx, step.rx, length);
+				}
+			}
+			return work;
+		};
+	}
+
+	static void
+	handleDmaTransferError();
+	static void
+	handleDmaReceiveComplete();
+	static void
+	handleDmaTransmitComplete();
+
+	/** kikass13:
+	* Push a given Task pointer onto the dma queue for later execution
+	*/
+	static constexpr void pushExec(const SpiExecutionEntry& entry)
+	{
+		/// push entry onto queue if not full
+		if(!executionQueue.full()){
+			executionQueue.push(entry);
+		}
+	}
+
+
+	/** kikass13:
+	* execute the next task on the dma queue when we have nothing else currently going on
+	* else, if the current execution task stil has valid steps, execute these instead
+	*/
+	static constexpr void exec()
+	{
+		/// exec the current task from queue if nothing else is going on
+		if(enabled && !executionQueue.empty() && state == 0 && (dmaTransmitComplete && dmaReceiveComplete)){
+			queueTask = true;
+			bool didADmaThing = false;
+			/// set entry to next queue entry
+			SpiExecutionEntry& execEntry = executionQueue.front();
+			SpiTransferEntry& entry = execEntry.front();
+			/// exec task now
+			if(entry.task.is_valid()){
+				didADmaThing = entry.task(entry.step);
+			}
+			/// if task has not done anything, becasue its conditional failed
+			/// pretend that we are finished, but skip the post stuff of the given task
+			if(!didADmaThing){
+				end(true);
+			}
+		}
+	}
+
+
+	/** kikass13:
+	* do end routine after a task is finished (dma transfer complete) and call exec, 
+	* to potentially trigger the next dma from the queue
+	*/
+	static void end(bool skipPost = false);
+
+private:
+
+	static inline bool dmaError { false };
+	static inline bool dmaTransmitComplete { true };
+	static inline bool dmaReceiveComplete { true };
+
+	// needed for transfers where no RX or TX buffers are given
+	static inline uint8_t dmaDummy { 0 };
+
+	static inline SpiTransferExecutionQueue executionQueue;
+
+	static inline SpiDataQueue buffers;
+	static inline size_t nextBuffer = 0;
+	static inline bool queueTask = false;
+	static inline bool tryToDisable = false;
+	static inline bool enabled = true;
+};
+
+} // namespace platform
+
+} // namespace modm
+
+#include "spi_master_{{ id }}_queued_dma_impl.hpp"
+
+#endif // MODM_STM32_SPI_MASTER{{ id }}_QUEUED_DMA_HPP

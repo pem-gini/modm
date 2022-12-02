@@ -1,0 +1,348 @@
+/*
+ * Copyright (c) 2020, Mike Wolfram
+ *
+ * This file is part of the modm project.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+// ----------------------------------------------------------------------------
+
+#ifndef MODM_STM32_SPI_MASTER{{ id }}_QUEUED_DMA_HPP
+#	error 	"Don't include this file directly, use 'spi_master_{{ id }}__Queued_Dma.hpp' instead!"
+#endif
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+template <class SystemClock, modm::baudrate_t baudrate, modm::percent_t tolerance>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE, SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::initialize()
+{
+	// Configure the DMA channels, then calls SpiMaster{{ id }}::initialzie().
+	Dma::RxChannel::configure(DmaBase::DataTransferDirection::PeripheralToMemory,
+			DmaBase::MemoryDataSize::Byte, DmaBase::PeripheralDataSize::Byte,
+			DmaBase::MemoryIncrementMode::Increment, DmaBase::PeripheralIncrementMode::Fixed,
+			DmaBase::Priority::High);
+	Dma::RxChannel::setPeripheralAddress(SPI{{ id }}_BASE + 0x0c);
+	Dma::RxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
+	Dma::RxChannel::setTransferCompleteIrqHandler(handleDmaReceiveComplete);
+	Dma::RxChannel::enableInterruptVector(2);
+	Dma::RxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
+			DmaBase::InterruptEnable::TransferComplete);
+	Dma::RxChannel::template setPeripheralRequest<Dma::RxRequest>();
+
+	Dma::TxChannel::configure(DmaBase::DataTransferDirection::MemoryToPeripheral,
+			DmaBase::MemoryDataSize::Byte, DmaBase::PeripheralDataSize::Byte,
+			DmaBase::MemoryIncrementMode::Increment, DmaBase::PeripheralIncrementMode::Fixed,
+			DmaBase::Priority::High);
+	Dma::TxChannel::setPeripheralAddress(SPI{{ id }}_BASE + 0x0c);
+	Dma::TxChannel::setTransferErrorIrqHandler(handleDmaTransferError);
+	Dma::TxChannel::setTransferCompleteIrqHandler(handleDmaTransmitComplete);
+	Dma::TxChannel::enableInterruptVector(1);
+	Dma::TxChannel::enableInterrupt(DmaBase::InterruptEnable::TransferError |
+			DmaBase::InterruptEnable::TransferComplete);
+	Dma::TxChannel::template setPeripheralRequest<Dma::TxRequest>();
+
+	SpiMaster{{ id }}::initialize<SystemClock, baudrate, tolerance>();
+
+%% if "fifo" in features
+	SpiHal{{ id }}::setRxFifoThreshold(SpiHal{{ id }}::RxFifoThreshold::QuarterFull);
+%% endif
+}
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+uint8_t
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE, SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transferBlockingSingleByte(uint8_t data){
+	// disable DMA for single byte transfer
+	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);
+	// wait for previous transfer to finish
+	while (!SpiHal{{ id }}::isTransmitRegisterEmpty()){
+		/// ...
+	}
+
+	// start transfer by copying data into register
+	SpiHal{{ id }}::write(data);
+	while(!SpiHal{{ id }}::isReceiveRegisterNotEmpty()){
+		/// ...
+	}
+	SpiHal{{ id }}::read(data);
+	
+	return data;
+}
+
+/**kikass13:
+* this function has no safety checks in place, when calling this, 
+* make sure that there is nothing else runnign on the spi bus going on 
+* and that the dma queue is not yet running
+*/
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+uint8_t
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transferBlocking(uint8_t data,
+		modm::SpiTransferConfiguration& configuration, 
+		SpiTransferChipSelectBehavior&& csbehavior)
+{
+	while(state != 0){}
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	if(configuration.pre){
+		configuration.pre();
+	}
+	csbehavior.pre();
+	uint8_t read = transferBlockingSingleByte(data);
+	csbehavior.post();
+	// if(configuration.post){
+	// 	configuration.post();
+	// }
+	if (!primask) {
+		__enable_irq();
+	}
+
+	return read;
+}
+
+/**kikass13:
+* this function has no safety checks in place, when calling this, 
+* make sure that there is nothing else runnign on the spi bus going on 
+* and that the dma queue is not yet running
+*/
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transferBlocking(const uint8_t *tx, uint8_t *rx, std::size_t length, 
+		modm::SpiTransferConfiguration& configuration, 
+		SpiTransferChipSelectBehavior&& csbehavior)
+{
+	while(state != 0){}
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+
+	if(configuration.pre){
+		configuration.pre();
+	}
+	csbehavior.pre();
+	for(size_t i = 0; i < length; i++){
+		uint8_t b = tx[i];
+		rx[i] = transferBlockingSingleByte(b);
+	}
+	csbehavior.post();
+	// if(configuration.post){
+	// 	configuration.post();
+	// }
+	if (!primask) {
+		__enable_irq();
+	}
+}
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransferError()
+{
+	SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
+			SpiBase::Interrupt::RxDmaEnable);
+	Dma::RxChannel::stop();
+	Dma::TxChannel::stop();
+	dmaError = true;
+}
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaReceiveComplete()
+{
+	Dma::RxChannel::stop();
+	dmaReceiveComplete = true;
+	end();
+}
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::handleDmaTransmitComplete()
+{
+	Dma::TxChannel::stop();
+	dmaTransmitComplete = true;
+	end();
+}
+
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::end(bool skipPost)
+{
+	/// we the last dma transfer was a queue thingy and if we have finished a task thingy
+	if(queueTask && dmaTransmitComplete && dmaReceiveComplete){
+		queueTask = false;
+		auto& execEntry = executionQueue.front();
+		SpiTransferEntry& entry = execEntry.front();
+		/// do we want to skip its post stuff?
+		if(!skipPost){
+			/// do its post stuff
+			// if(entry.step.configuration.post){
+			// 	entry.step.configuration.post();
+			// }
+			/// call cs post behavor
+			entry.step.cs.post();
+			/// call step callback
+			if(entry.step.cb){
+				entry.step.cb();
+			}
+		}
+	
+		// clear the state - block transfer finished
+		state &= ~Bit1;
+
+		/// pop the task from execution queue if this was the last step of the task chain
+		/// or else, keep the task on the execution queue, as we are still working on children
+
+		execEntry.pop(); /// pop step, its done
+		if(execEntry.empty()){
+			executionQueue.pop(); /// pop complete entry, task done
+			/// if tryToDisable is set, we disable now!
+			if(tryToDisable){
+				enabled = false;
+			}
+		}
+		/// re trgger ourselfs with next task in queue, if that is nullptr, the exec will just choose the next one on the queue
+		exec();
+	}
+}
+
+/** kikass13:
+* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
+* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty
+* this is a limitation of the the queue triggering itself after dma is finished, as there is no feasible way to let
+* other functions intervene - as this would lead to further problems with the dma queue down the road (overflow)
+* so these kind of calls (with this specific queued dma spi driver) will potentially have to wait a long time (infinitly) 
+* until they are able to get their job done
+*/
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+modm::ResumableResult<uint8_t>
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transfer(uint8_t data)
+{
+	// this is a manually implemented "fast resumable function"
+	if ( state == 0 )
+	{
+		// disable DMA for single byte transfer
+		SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
+				SpiBase::Interrupt::RxDmaEnable);
+
+		// wait for previous transfer to finish
+		if (!SpiHal{{ id }}::isTransmitRegisterEmpty())
+			return {modm::rf::Running};
+
+		// start transfer by copying data into register
+		SpiHal{{ id }}::write(data);
+
+		// set LSB = Bit0 to state Single Transfer
+		state |= Bit0;
+	}
+	else{
+		return {modm::rf::Running};
+	}
+
+	if (!SpiHal{{ id }}::isReceiveRegisterNotEmpty())
+		return {modm::rf::Running};
+
+	SpiHal{{ id }}::read(data);
+
+	// single transfer finished
+	state &= ~Bit0;
+
+	/// trigger next task from the dma queue here
+	/// as we would never call exec again if this function has interrupted the "normal" queue flow
+	exec();
+	/// this function will return shortly after the next dma transfer was started and while the dma transfer is going on)
+
+	return {modm::rf::Stop, data};
+}
+
+/** kikass13:
+* this function will only do something when there is no currently running dma transfer (otherwise it returns running).
+* This means that there is no way that this function can ever do somehing as long as the dma queue is ot empty
+* this is a limitation of the the queue triggering itself after dma is finished, as there is no feasible way to let
+* other functions intervene - as this would lead to further problems with the dma queue down the road (overflow)
+* so these kind of calls (with this specific queued dma spi driver) will potentially have to wait a long time (infinitly) 
+* until they are able to get their job done
+*/
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+modm::ResumableResult<void>
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::transfer(const uint8_t *tx, uint8_t *rx, std::size_t length)
+{
+	// this is a manually implemented "fast resumable function"
+	// there is no context or nesting protection, since we don't need it.
+	// there are only two states encoded into 1 bit (Bit1 of state):
+	//   1. initialize index, and
+	//   2. wait for 1-byte transfer to finish.
+
+	// we are only interested in Bit1
+	switch(state)
+	{
+	case 0:
+		// we will only visit this state once
+		basicTransfer(tx, rx, length);
+
+		[[fallthrough]];
+
+	default:
+		while (true) {
+			if (dmaError)
+				break;
+			if (not dmaTransmitComplete and not dmaReceiveComplete)
+				return { modm::rf::Running };
+			if (SpiHal{{ id }}::getInterruptFlags() & SpiBase::InterruptFlag::Busy)
+				return { modm::rf::Running };
+%% if "fifo" in features
+			if (SpiHal{{ id }}::getInterruptFlags() & SpiBase::InterruptFlag::FifoTxLevel)
+				return { modm::rf::Running };
+			if (SpiHal{{ id }}::getInterruptFlags() & SpiBase::InterruptFlag::FifoRxLevel)
+				return { modm::rf::Running };
+%% endif
+			break;
+		}
+
+		SpiHal{{ id }}::disableInterrupt(SpiBase::Interrupt::TxDmaEnable |
+				SpiBase::Interrupt::RxDmaEnable);
+		// clear the state
+		state &= ~Bit1;
+
+		/// trigger next task from the dma queue here
+		/// as we would never call exec again if this function has interrupted the "normal" queue flow
+		exec();
+		/// this function will return shortly after the next dma transfer was started and while the dma transfer is going on)
+		return {modm::rf::Stop};
+	}
+}
+
+/// kikass13:
+/// Basic spi transfer via dma will start a dma transfer with the given tx, rx length parameters
+/// This function is used directly by the dma queue as well as indiretly by the resumable transfer function
+template <class DmaChannelRx, class DmaChannelTx, size_t QUEUE_SIZE, size_t SPI_DATA_BUFFER_COUNT, size_t SPI_DATA_BUFFER_LENGTH>
+void
+modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZE , SPI_DATA_BUFFER_COUNT, SPI_DATA_BUFFER_LENGTH>::basicTransfer(const uint8_t *tx, uint8_t *rx, std::size_t length)
+{
+	/// set state to block transfer
+	state |= Bit1;
+	dmaError = false;
+	SpiHal{{ id }}::enableInterrupt(SpiBase::Interrupt::TxDmaEnable | SpiBase::Interrupt::RxDmaEnable);
+	if (tx) {
+		Dma::TxChannel::setMemoryAddress(uint32_t(tx));
+		Dma::TxChannel::setMemoryIncrementMode(true);
+	} else {
+		Dma::TxChannel::setMemoryAddress(uint32_t(&dmaDummy));
+		Dma::TxChannel::setMemoryIncrementMode(false);
+	}
+	if (rx) {
+		Dma::RxChannel::setMemoryAddress(uint32_t(rx));
+		Dma::RxChannel::setMemoryIncrementMode(true);
+	} else {
+		Dma::RxChannel::setMemoryAddress(uint32_t(&dmaDummy));
+		Dma::RxChannel::setMemoryIncrementMode(false);
+	}
+
+	Dma::RxChannel::setDataLength(length);
+	dmaReceiveComplete = false;
+	Dma::RxChannel::start();
+
+	Dma::TxChannel::setDataLength(length);
+	dmaTransmitComplete = false;
+	Dma::TxChannel::start();
+}
+
+

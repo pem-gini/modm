@@ -10,24 +10,28 @@
  */
 // ----------------------------------------------------------------------------
 
-#ifndef MODM_ADIS16470_HPP
-#define MODM_ADIS16470_HPP
+#ifndef MODM_ADIS16470_DMAINT_HPP
+#define MODM_ADIS16470_DMAINT_HPP
 
 #include <array>
 #include <optional>
 #include <span>
+#include <functional>
 #include <modm/architecture/interface/spi_device.hpp>
 #include <modm/architecture/interface/register.hpp>
 #include <modm/architecture/interface/gpio.hpp>
-#include <modm/processing/resumable.hpp>
 #include <modm/processing/timer/timeout.hpp>
+#include <modm/processing/resumable.hpp>
+#include <modm/platform/exti/exti.hpp>
+#include <modm/architecture/interface/peripheral.hpp>
 #include <modm/architecture/interface/spi.hpp>
+#include <modm/math.hpp>
 
 namespace modm
 {
 
 /// @ingroup modm_driver_adis16470
-struct adis16470
+struct adis16470DmaInt
 {
 	/// Available registers
 	enum class
@@ -180,16 +184,75 @@ struct adis16470
 	MODM_FLAGS16(GlobCmd);
 };
 
+using RegisterBurstBuffer = std::array<uint16_t, 11>;
+struct RegisterBurstData{
+	bool valid = false;
+	RegisterBurstBuffer buffer;
+};
+
+class RegisterBurst{
+private:
+	static constexpr float g = 9.81;
+	static constexpr float g_factor = 1.25 * g / 1000.0; /// 1bit value ~ 1.25 milli g (1/1000 of g)
+    static constexpr float convertAcc(int16_t val) {
+        return val * g_factor;
+    }
+    static constexpr float convertGyro(int16_t val) {
+        float value = static_cast<float>(val / 10.0);
+        return value;
+    }
+	static constexpr float convertTemperature(int16_t val){
+		return val * 0.1; /// Temperature data; twos complement, 1 LSB = 0.1°C, 0°C = 0x0000
+	}
+public:
+	RegisterBurst(const RegisterBurstData& data) 
+	: valid{data.valid},
+	  diag_stat{data.buffer[1]},
+	  gyrox{convertGyro(data.buffer[2])},
+	  gyroy{convertGyro(data.buffer[3])},
+	  gyroz{convertGyro(data.buffer[4])},
+	  accelx{convertAcc(data.buffer[5])},
+	  accely{convertAcc(data.buffer[6])},
+	  accelz{convertAcc(data.buffer[7])},
+	  temperature{convertTemperature(data.buffer[8])},
+	  counter{data.buffer[9]}
+	  {}
+	bool valid;
+	adis16470DmaInt::DiagStat diag_stat;
+	float gyrox;
+	float gyroy;
+	float gyroz;
+	float accelx;
+	float accely;
+	float accelz;
+	float temperature;
+	uint16_t counter;
+	// float checksum; /// skip checksum
+};
+
 /**
  * \ingroup	modm_driver_adis16470
- * \author	Raphael Lehmann
+ * \author	Raphael Lehmann, Nick Fiege
  */
-template<class SpiMaster, class Cs>
-class Adis16470 : public adis16470,
-				  public modm::SpiDevice<SpiMaster>,
-				  protected modm::NestedResumable<2>
+template<class SpiQueuedDma, class Cs>
+class Adis16470DmaInt : public adis16470DmaInt, protected modm::NestedResumable<2>, public modm::SpiDevice<SpiQueuedDma>
 {
+private:
+	inline static modm::SpiTransferConfiguration configuration = modm::SpiTransferConfiguration{
+		.pre = [](){
+			SpiQueuedDma::setDataMode(SpiQueuedDma::DataMode::Mode3);
+			SpiQueuedDma::setDataOrder(SpiQueuedDma::DataOrder::MsbFirst);
+		}
+	};
+
 public:
+	using BurstData = std::function<void()>;
+	using AdisInterruptCallback = std::function<void()>;
+	using RegisterBurstFinishedCallback = std::function<void(const RegisterBurst&)>;
+
+	Adis16470DmaInt() : intCallback{nullptr}, registerBurstFinished{nullptr} 
+	{}
+
 	/**
 	 * @brief Initialize
 	 *
@@ -217,7 +280,7 @@ public:
 	 *
 	 * @return The register value
 	 */
-	modm::ResumableResult<modm::adis16470::DiagStat_t>
+	modm::ResumableResult<modm::adis16470DmaInt::DiagStat_t>
 	readDiagStat();
 
 	/**
@@ -225,7 +288,7 @@ public:
 	 *
 	 * @return The register value
 	 */
-	modm::ResumableResult<modm::adis16470::MscCtrl_t>
+	modm::ResumableResult<modm::adis16470DmaInt::MscCtrl_t>
 	readMscCtrl();
 
 	/**
@@ -245,7 +308,7 @@ public:
 	 * @param value The value to be written to the MSC_CTRL register.
 	 */
 	modm::ResumableResult<void>
-	writeMscCtrl(modm::adis16470::MscCtrl_t value);
+	writeMscCtrl(modm::adis16470DmaInt::MscCtrl_t value);
 
 	/**
 	 * @brief Write the MSC_CTRL register
@@ -253,7 +316,7 @@ public:
 	 * @param value The value to be written to the MSC_CTRL register.
 	 */
 	modm::ResumableResult<void>
-	writeGlobCmd(modm::adis16470::GlobCmd_t value);
+	writeGlobCmd(modm::adis16470DmaInt::GlobCmd_t value);
 
 	/**
 	 * @brief Set the desired data output frequency from 1Hz to 2kHz
@@ -306,6 +369,22 @@ public:
 	modm::ResumableResult<bool>
 	readRegisterBurst(std::array<uint16_t, 11>& data);
 
+	template<typename Int>
+	void
+	registerInterruptCallback(auto&& cb);
+
+	void
+	readRegisterBurstIntoBuffer();
+
+	inline RegisterBurst
+	getRegisterBurst() const {return RegisterBurst{burstData};}
+
+	void
+	registerBurstFinishedCallback(auto cb) {
+		registerBurstFinished = cb;
+	}
+
+
 private:
 	static constexpr std::size_t bufferSize = 22;
 	std::array<uint8_t, bufferSize> buffer;
@@ -315,12 +394,18 @@ private:
 
 	const modm::ShortPreciseDuration tStall{std::chrono::microseconds(16)};
 	modm::ShortPreciseTimeout timeout{tStall};
+
+	AdisInterruptCallback intCallback;
+	RegisterBurstFinishedCallback registerBurstFinished;
+	RegisterBurstData burstData;
+
+	static SpiQueuedDma spi;
 };
 
 
 } // modm namespace
 
-#include "adis16470_io.hpp"
-#include "adis16470_impl.hpp"
+#include "adis16470_dmaint_io.hpp"
+#include "adis16470_dmaint_impl.hpp"
 
-#endif // MODM_ADIS16470_HPP
+#endif // MODM_ADIS16470_DMAINT_HPP
