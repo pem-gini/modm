@@ -41,6 +41,8 @@ class Instance(Module):
                 description="",
                 minimum=0, maximum=2 ** 16 - 2,
                 default=0))
+        module.add_option(BooleanOption(name="dma", default=True,
+                                  description="Enable DMA Readable Uart"))
 
         return True
 
@@ -54,6 +56,7 @@ class Instance(Module):
         props["name"] = self.driver["name"].capitalize() + str(self.instance)
         props["hal"] = self.driver["name"].capitalize() + "Hal" + str(self.instance)
         props["buffered"] = env["buffer.tx"] or env["buffer.rx"]
+        props["dma"] = env["dma"]
 
         env.substitutions = props
         env.outbasepath = "modm/src/modm/platform/uart"
@@ -65,10 +68,12 @@ class Instance(Module):
 
         env.template("uart_hal.hpp.in", "{}_hal_{}.hpp".format(uart, self.instance))
         env.template("uart_hal_impl.hpp.in", "{}_hal_{}_impl.hpp".format(uart, self.instance))
-        # env.template("uart.hpp.in", "{}_{}.hpp".format(uart, self.instance))
-        # env.template("uart.cpp.in", "{}_{}.cpp".format(uart, self.instance))
-        env.template("uart_dma.hpp.in", "{}_dma_{}.hpp".format(uart, self.instance))
-        env.template("uart_dma_impl.hpp.in", "{}_dma_{}_impl.hpp".format(uart, self.instance))
+        if props["dma"]:
+            env.template("uart_dma.hpp.in", "{}_dma_{}.hpp".format(uart, self.instance))
+            env.template("uart_dma_impl.hpp.in", "{}_dma_{}_impl.hpp".format(uart, self.instance))
+        else:
+            env.template("uart.hpp.in", "{}_{}.hpp".format(uart, self.instance))
+            env.template("uart.cpp.in", "{}_{}.cpp".format(uart, self.instance))
 
         #props["instances"].append(props["name"])
         if props["buffered"]:
