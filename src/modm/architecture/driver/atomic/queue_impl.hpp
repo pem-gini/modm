@@ -134,7 +134,7 @@ modm::atomic::Queue<T, N>::copy(const T* src, size_t length)
 		std::memcpy(&this->buffer[this->head], src, length);
 	}
 	Index tmphead = this->head + length;
-	if (tmphead >= (N + 1)) { tmphead = tmphead - N; }
+	if (tmphead >= (N)) { tmphead = tmphead - N; }
 	this->head = tmphead;
 	return true;
 }
