@@ -169,6 +169,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 	/// we the last dma transfer was a queue thingy and if we have finished a task thingy
 	if(queueTask && dmaTransmitComplete && dmaReceiveComplete){
 		queueTask = false;
+		bool retry = false;
 		auto& execEntry = executionQueue.front();
 		SpiTransferEntry& entry = execEntry.front();
 		/// do we want to skip its post stuff?
@@ -181,7 +182,7 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 			entry.step.cs.post();
 			/// call step callback
 			if(entry.step.cb){
-				entry.step.cb();
+				retry = entry.step.cb();
 			}
 		}
 	
@@ -190,15 +191,17 @@ modm::platform::SpiMaster{{ id }}QueuedDma<DmaChannelRx, DmaChannelTx, QUEUE_SIZ
 
 		/// pop the task from execution queue if this was the last step of the task chain
 		/// or else, keep the task on the execution queue, as we are still working on children
-
-		execEntry.pop(); /// pop step, its done
-		if(execEntry.empty()){
-			executionQueue.pop(); /// pop complete entry, task done
-			/// if tryToDisable is set, we disable now!
-			if(tryToDisable){
-				enabled = false;
+		if(!retry){
+			execEntry.pop(); /// pop step, its done
+			if(execEntry.empty()){
+				executionQueue.pop(); /// pop complete entry, task done
+				/// if tryToDisable is set, we disable now!
+				if(tryToDisable){
+					enabled = false;
+				}
 			}
 		}
+		
 		/// re trgger ourselfs with next task in queue, if that is nullptr, the exec will just choose the next one on the queue
 		exec();
 	}

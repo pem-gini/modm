@@ -312,6 +312,7 @@ Adis16470DmaInt<SpiQueuedDma, Cs>::readRegisterBurstIntoBuffer()
 		if(registerBurstFinished){
 			registerBurstFinished(getRegisterBurst());
 		}
+		return false;
 	};
 
 	buffer.fill(0);
