@@ -278,6 +278,7 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 		if(!interruptPin.read()){
 			mcp2515ReadMessage();
 		}
+		return false;
 	};
 
 	static constexpr auto processStatusAndPrepareRead = [&]() {
@@ -304,7 +305,9 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515ReadMessage()
 		{
 			recv_tx_buf[0] = addressBufferR;
 			recv_tx_buf[1] = 0xff;
+			return false;
 		}
+		return true;
 	};
 
 	////////////////////////////////////////////////////////////////////////////
@@ -392,12 +395,18 @@ modm::Mcp2515DmaInt<SPI, CS, INT>::mcp2515SendMessage(const can::Message &messag
 				}
 			}
 		}
+		/// retry on failure
+		if(addressBufferS == 0xFF){
+			return true;
+		}
+		return false;
 	};
 
 	static constexpr auto identifierPost = [&](){
 		addressBufferS = (addressBufferS == 0) ? 1 : addressBufferS;  // 0 2 4 => 1 2 4
 		send_tx_buf[0] = RTS | addressBufferS;
 		send_tx_buf[1] = 0xff;
+		return false;
 	};
 
 	// go

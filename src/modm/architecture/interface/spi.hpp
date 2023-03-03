@@ -56,7 +56,7 @@ struct SpiTransferConfiguration{
 };
 // using SpiTransferConditional = etl::delegate<bool()>;
 // using SpiTransferLength = etl::delegate<std::size_t()>;
-using SpiTransferCallback = std::function<void()>;
+using SpiTransferCallback = std::function<bool()>;
 using SpiTransferConditional = std::function<bool()>;
 using SpiTransferLength = std::function<std::size_t()>;
 using SpiTransferCs = std::function<void()>;
